@@ -95,7 +95,9 @@ async function iniciaPyodide() {
 // Para cada arquivo da pasta guarda o resultado já processado da leitura; na próxima análise, arquivo com o mesmo
 // caminho, tamanho e data de alteração não é lido de novo (o Python recebe o resultado guardado — cache_arquivos.py).
 const CACHE = "/cache";
-const BANCO = "faturamento_cache";
+// prefixo do site (vem do index.html): sites do mesmo endereço não dividem os arquivos já lidos
+const ESCOPO = new URL(self.location.href).searchParams.get("escopo") || "";
+const BANCO = (ESCOPO ? ESCOPO + ":" : "") + "faturamento_cache";
 const LIMITE_MB = 1500;                            // acima disso, apaga o que não é da pasta atual
 
 function abreBanco() {

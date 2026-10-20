@@ -1,4 +1,10 @@
 const CHAVE_JUSTIFICATIVA = '__CHAVE_JUSTIFICATIVA__';
+// Dentro do site, as chaves do navegador levam o prefixo do site (ESCOPO_ARMAZENAMENTO do index.html): sites do mesmo
+// endereço não misturam as edições. Aberto como arquivo baixado, fica sem prefixo.
+const LS_PREFIXO = (() => {
+    try { const e = window.parent && window.parent !== window && window.parent.ESCOPO_ARMAZENAMENTO; return e ? e + ':' : ''; }
+    catch (e) { return ''; }
+})();
 
 const VIEWS = ['resumo', 'tabelas', 'analise', 'indiretas', 'forecast', 'dre', 'garantia', 'plano', 'onepage', 'dados'];
 function mostrarView(view) {
@@ -575,7 +581,7 @@ async function lerJustificativasDaPasta() {
     if (item && item.atualizado !== justAtualizado) {
         if (justAtualizado !== null && typeof avisoNuvem === 'function') avisoNuvem('Justificativas: atualizadas com alterações salvas por outra pessoa');
         lista.innerHTML = item.html;
-        localStorage.setItem(CHAVE_JUSTIFICATIVA, item.html);
+        localStorage.setItem(LS_PREFIXO + CHAVE_JUSTIFICATIVA, item.html);
         justAtualizado = item.atualizado;
         justPreparar();
     }
@@ -584,7 +590,7 @@ async function lerJustificativasDaPasta() {
 }
 
 function carregarJustificativas() {
-    const salvo = localStorage.getItem(CHAVE_JUSTIFICATIVA);
+    const salvo = localStorage.getItem(LS_PREFIXO + CHAVE_JUSTIFICATIVA);
     if (salvo) document.getElementById('lista-justificativas').innerHTML = salvo;
     justPreparar();
     lerJustificativasDaPasta();
@@ -594,7 +600,7 @@ function carregarJustificativas() {
 async function salvarJustificativas() {
     justLimparVazios();
     const conteudo = limparHtmlJust(document.getElementById('lista-justificativas').innerHTML);
-    localStorage.setItem(CHAVE_JUSTIFICATIVA, conteudo);
+    localStorage.setItem(LS_PREFIXO + CHAVE_JUSTIFICATIVA, conteudo);
     const comp = justCompartilhada();
     if (!comp) return;
     justStatus('Salvando na pasta…');
@@ -1211,14 +1217,14 @@ function sitlVisao(visao) {
     document.querySelectorAll('.sitl-visao button').forEach(b => {
         const ativo = b.dataset.visao === visao; b.classList.toggle('ativo', ativo); b.setAttribute('aria-pressed', ativo ? 'true' : 'false');
     });
-    try { localStorage.setItem('faturamento_sitl_visao', visao); } catch (e) { /* sem armazenamento */ }
+    try { localStorage.setItem(LS_PREFIXO + 'faturamento_sitl_visao', visao); } catch (e) { /* sem armazenamento */ }
 }
 document.addEventListener('click', function (e) {
     const b = e.target.closest && e.target.closest('.sitl-visao button');
     if (b) { sitlVisao(b.dataset.visao); configAlterada(); }
 });
 document.addEventListener('DOMContentLoaded', function () {
-    let v = null; try { v = localStorage.getItem('faturamento_sitl_visao'); } catch (e) { /* sem armazenamento */ }
+    let v = null; try { v = localStorage.getItem(LS_PREFIXO + 'faturamento_sitl_visao'); } catch (e) { /* sem armazenamento */ }
     if (v === 'sintetica') sitlVisao(v);
 });
 
@@ -1284,11 +1290,11 @@ const PREV_EV_RI = PREV_CLASSES_RI.map(k => 'ev_' + k);          // aba Indireta
 PREV_BASICAS.push(...PREV_EV_RI, 'ev_iE');
 const PREV_CHAVE_LS = 'faturamento_previsao_v2';
 let prevEdicoes = {}, prevOculta = false, prevOcultaInd = false;     // "Ocultar forecast": um para a aba Forecast, outro para a Indiretas
-try { const salvo = JSON.parse(localStorage.getItem(PREV_CHAVE_LS) || '{}'); prevEdicoes = salvo.edicoes || {};
+try { const salvo = JSON.parse(localStorage.getItem(LS_PREFIXO + PREV_CHAVE_LS) || '{}'); prevEdicoes = salvo.edicoes || {};
     // a SUP LAGOS passou a se chamar INTERIOR: as edições guardadas com o nome antigo continuam valendo
     Object.keys(prevEdicoes).filter(c => c.includes('|LAGOS|')).forEach(c => { const n = c.replace('|LAGOS|', '|INTERIOR|'); if (!(n in prevEdicoes)) prevEdicoes[n] = prevEdicoes[c]; delete prevEdicoes[c]; }); prevOculta = !!salvo.oculta; prevOcultaInd = !!salvo.ocultaInd; } catch (e) { /* sem armazenamento: vale só nesta abertura */ }
 function prevSalvar() {
-    try { localStorage.setItem(PREV_CHAVE_LS, JSON.stringify({ edicoes: prevEdicoes, oculta: prevOculta, ocultaInd: prevOcultaInd })); } catch (e) { /* ignora */ }
+    try { localStorage.setItem(LS_PREFIXO + PREV_CHAVE_LS, JSON.stringify({ edicoes: prevEdicoes, oculta: prevOculta, ocultaInd: prevOcultaInd })); } catch (e) { /* ignora */ }
     if (typeof syncForecast !== 'undefined') syncForecast.agendar();
 }
 
@@ -1755,9 +1761,9 @@ const SIT_LS = 'faturamento_situacao_grupo';
 const SIT_OPCOES = ['Liberado', 'Em Análise', 'LIS', 'Aguardando'];
 const SIT_CLASSE = { 'Liberado': 'sit-liberado', 'Em Análise': 'sit-analise', 'LIS': 'sit-lis', 'Aguardando': 'sit-aguardando' };
 let sitManuais = {};
-try { sitManuais = JSON.parse(localStorage.getItem(SIT_LS) || '{}') || {}; } catch (e) { /* sem armazenamento: vale só nesta abertura */ }
+try { sitManuais = JSON.parse(localStorage.getItem(LS_PREFIXO + SIT_LS) || '{}') || {}; } catch (e) { /* sem armazenamento: vale só nesta abertura */ }
 function sitSalvar() {
-    try { localStorage.setItem(SIT_LS, JSON.stringify(sitManuais)); } catch (e) { /* ignora */ }
+    try { localStorage.setItem(LS_PREFIXO + SIT_LS, JSON.stringify(sitManuais)); } catch (e) { /* ignora */ }
     if (typeof garDesenharResumo === 'function') setTimeout(garDesenharResumo, 0);     // "Somente grupos liberados" acompanha
     if (typeof syncSituacao !== 'undefined') syncSituacao.agendar();
 }
@@ -1910,13 +1916,13 @@ function criaSync(secao, nome, obter, definir, redesenhar, ocupado) {
     };
 }
 var syncForecast = criaSync('forecast', 'Forecast', () => prevEdicoes,
-    (m) => { prevEdicoes = m; try { localStorage.setItem(PREV_CHAVE_LS, JSON.stringify({ edicoes: prevEdicoes, oculta: prevOculta, ocultaInd: prevOcultaInd })); } catch (e) {} },
+    (m) => { prevEdicoes = m; try { localStorage.setItem(LS_PREFIXO + PREV_CHAVE_LS, JSON.stringify({ edicoes: prevEdicoes, oculta: prevOculta, ocultaInd: prevOcultaInd })); } catch (e) {} },
     () => prevRecalcularTodas(),
     () => document.activeElement && document.activeElement.classList && document.activeElement.classList.contains('p-prev'));
 var syncSituacao = criaSync('situacao', 'Situação do grupo',
     () => { const plano = {}; Object.entries(sitManuais).forEach(([ref, gs]) => Object.entries(gs).forEach(([g, v]) => { plano[ref + '|' + g] = v; })); return plano; },
     (plano) => { sitManuais = {}; Object.entries(plano).forEach(([k, v]) => { const i = k.lastIndexOf('|'); (sitManuais[k.slice(0, i)] = sitManuais[k.slice(0, i)] || {})[k.slice(i + 1)] = v; });
-                 try { localStorage.setItem(SIT_LS, JSON.stringify(sitManuais)); } catch (e) {} },
+                 try { localStorage.setItem(LS_PREFIXO + SIT_LS, JSON.stringify(sitManuais)); } catch (e) {} },
     () => { document.querySelectorAll('.sit-grupo[data-sit-grupo]').forEach(sitAplicar);
             if (window.gruposAuto) window.aplicarGruposPadrao(); },        // situação manual chegou da pasta: refaz os grupos padrão
     () => !!document.querySelector('select.sit-escolha'));
@@ -1951,14 +1957,14 @@ function lerConfig() {
 }
 function configAlterada() {
     if (aplicandoConfig) return;
-    try { localStorage.setItem(CONFIG_LS, JSON.stringify(lerConfig())); } catch (e) { /* sem armazenamento */ }
+    try { localStorage.setItem(LS_PREFIXO + CONFIG_LS, JSON.stringify(lerConfig())); } catch (e) { /* sem armazenamento */ }
 }
 function aplicarConfig(c) {
     aplicandoConfig = true;
     try {
         if ('ocultaForecast' in c || 'ocultaIndiretas' in c) {
             prevOculta = !!c.ocultaForecast; prevOcultaInd = !!c.ocultaIndiretas;
-            try { localStorage.setItem(PREV_CHAVE_LS, JSON.stringify({ edicoes: prevEdicoes, oculta: prevOculta, ocultaInd: prevOcultaInd })); } catch (e) {}
+            try { localStorage.setItem(LS_PREFIXO + PREV_CHAVE_LS, JSON.stringify({ edicoes: prevEdicoes, oculta: prevOculta, ocultaInd: prevOcultaInd })); } catch (e) {}
             previsaoAplicarVisibilidade();
         }
         const sel = document.getElementById('selOrcCiclo');
@@ -1969,7 +1975,7 @@ function aplicarConfig(c) {
     } finally { aplicandoConfig = false; }
 }
 document.addEventListener('DOMContentLoaded', () => {
-    let c = null; try { c = JSON.parse(localStorage.getItem(CONFIG_LS) || 'null'); } catch (e) { c = null; }
+    let c = null; try { c = JSON.parse(localStorage.getItem(LS_PREFIXO + CONFIG_LS) || 'null'); } catch (e) { c = null; }
     if (c) aplicarConfig(c);
 });
 
@@ -1981,7 +1987,7 @@ const GAR = { dados: null, porLig: new Map(), ref: '', top: 1000, refs: [], tari
               ordem: { campo: 'rank', desc: false }, carregando: null };
 const GAR_LS = 'faturamento_garantia';
 let garItens = {};
-try { garItens = JSON.parse(localStorage.getItem(GAR_LS) || '{}') || {}; } catch (e) { /* sem armazenamento */ }
+try { garItens = JSON.parse(localStorage.getItem(LS_PREFIXO + GAR_LS) || '{}') || {}; } catch (e) { /* sem armazenamento */ }
 const garEsc = (v) => String(v == null ? '' : v).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const garR = (v) => (v == null || isNaN(v) ? '–' : 'R$ ' + fmtBR(v, 2));
 const garN = (v, d) => (v == null || isNaN(v) ? '–' : fmtBR(v, d || 0));
@@ -2191,7 +2197,7 @@ function garItensDoMes() {
         .map(([k, v]) => ({ lig: k.slice(GAR.ref.length + 1), ...v })).sort((a, b) => (a.ordem || 0) - (b.ordem || 0));
 }
 function garSalvar() {
-    try { localStorage.setItem(GAR_LS, JSON.stringify(garItens)); } catch (e) { /* ignora */ }
+    try { localStorage.setItem(LS_PREFIXO + GAR_LS, JSON.stringify(garItens)); } catch (e) { /* ignora */ }
     if (typeof syncGarantia !== 'undefined') syncGarantia.agendar();
 }
 function garAdicionar(ligs) {
@@ -2591,7 +2597,7 @@ function garRedesenhar() {
     garDesenharTop(); garDesenharVar(); garDesenharAnalise(); garDesenharResumo(); garDesenharOS();
 }
 var syncGarantia = criaSync('garantia', 'Análise de garantia', () => garItens,
-    (m) => { garItens = m; try { localStorage.setItem(GAR_LS, JSON.stringify(garItens)); } catch (e) {} },
+    (m) => { garItens = m; try { localStorage.setItem(LS_PREFIXO + GAR_LS, JSON.stringify(garItens)); } catch (e) {} },
     () => garRedesenhar(),
     () => !!(document.activeElement && document.activeElement.closest && document.activeElement.closest('#garTabelaAnalise')));
 garCarregar().then(() => { garRedesenhar(); syncGarantia.puxar(); }).catch((e) => console.warn('Garantia: dados não carregaram', e));
@@ -2601,7 +2607,7 @@ garCarregar().then(() => { garRedesenhar(); syncGarantia.puxar(); }).catch((e) =
 // mesmo para todos e incluído no PDF executivo. Sem plano no mês, aparece o último colado (com aviso).
 const PLANO_LS = 'faturamento_plano';
 let planoMapa = {};
-try { planoMapa = JSON.parse(localStorage.getItem(PLANO_LS) || '{}') || {}; } catch (e) { /* sem armazenamento */ }
+try { planoMapa = JSON.parse(localStorage.getItem(LS_PREFIXO + PLANO_LS) || '{}') || {}; } catch (e) { /* sem armazenamento */ }
 const planoNorm = (v) => String(v || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().trim();
 const planoRefChave = (r) => { const m = /^(\d{2})\/(\d{4})$/.exec(r || ''); return m ? m[2] + m[1] : String(r || ''); };
 function planoInfo() {
@@ -2616,7 +2622,7 @@ function planoAtual() {                          // [ref, plano] do mês; sem pl
     return antes.length ? [antes[0], planoMapa[antes[0]]] : [null, null];
 }
 function planoSalvar() {
-    try { localStorage.setItem(PLANO_LS, JSON.stringify(planoMapa)); } catch (e) { /* ignora */ }
+    try { localStorage.setItem(LS_PREFIXO + PLANO_LS, JSON.stringify(planoMapa)); } catch (e) { /* ignora */ }
     if (typeof syncPlano !== 'undefined') syncPlano.agendar();
 }
 function planoDataDe(t) {                        // "dd/mm/aaaa" (ou dd/mm/aa) → Date
@@ -2717,7 +2723,7 @@ document.addEventListener('click', (e) => {
     }
 });
 var syncPlano = criaSync('plano', 'Plano de ação', () => planoMapa,
-    (m) => { planoMapa = m; try { localStorage.setItem(PLANO_LS, JSON.stringify(planoMapa)); } catch (e) {} },
+    (m) => { planoMapa = m; try { localStorage.setItem(LS_PREFIXO + PLANO_LS, JSON.stringify(planoMapa)); } catch (e) {} },
     () => planoDesenhar(), () => false);
 document.addEventListener('DOMContentLoaded', () => { planoDesenhar(); syncPlano.puxar(); });
 
@@ -2729,10 +2735,10 @@ function analiseAplicarVista(v) {
     analiseVista = v === 'esgoto' ? 'esgoto' : 'todas';
     document.querySelectorAll('.vista-serv').forEach((el) => { el.hidden = el.dataset.vista !== analiseVista; });
     document.querySelectorAll('[data-vista-btn]').forEach((b) => { const ok = b.dataset.vistaBtn === analiseVista; b.classList.toggle('ativo', ok); b.setAttribute('aria-pressed', ok ? 'true' : 'false'); });
-    try { localStorage.setItem('faturamento_analise_vista', analiseVista); } catch (e) { /* sem armazenamento */ }
+    try { localStorage.setItem(LS_PREFIXO + 'faturamento_analise_vista', analiseVista); } catch (e) { /* sem armazenamento */ }
 }
 document.addEventListener('click', (e) => { const b = e.target.closest && e.target.closest('[data-vista-btn]'); if (b) analiseAplicarVista(b.dataset.vistaBtn); });
-document.addEventListener('DOMContentLoaded', () => { let v = null; try { v = localStorage.getItem('faturamento_analise_vista'); } catch (e) {} analiseAplicarVista(v); });
+document.addEventListener('DOMContentLoaded', () => { let v = null; try { v = localStorage.getItem(LS_PREFIXO + 'faturamento_analise_vista'); } catch (e) {} analiseAplicarVista(v); });
 
 
 // ===== Aba One page: acompanhamento do faturamento numa folha vertical (lê bem no celular; PDF de uma página) =====
@@ -3038,7 +3044,7 @@ function opBlocoVolumes(D) {
 // ---- Top 5: maiores quedas e aumentos de faturamento (água) entre os clientes do Top 100 ----
 // chave pessoal (navegador): só matrículas liberadas = Situação Conta do mês diferente de "Em análise" (base da aba Garantia)
 let opSoLiberadas = false;
-try { opSoLiberadas = localStorage.getItem('faturamento_op_top_liberadas') === '1'; } catch (e) { opSoLiberadas = false; }
+try { opSoLiberadas = localStorage.getItem(LS_PREFIXO + 'faturamento_op_top_liberadas') === '1'; } catch (e) { opSoLiberadas = false; }
 const opLig = (v) => String(v == null ? '' : v).trim().replace(/\.0+$/, '');
 function opTop5(D, tipo) {
     const chave = `${tipo}-agua`, d = lerJson('top100-dados');
@@ -3132,7 +3138,7 @@ document.addEventListener('click', (e) => {
     if (t.id === 'opPdf') { gerarOnePage(); return; }
     if (t.id === 'opTopLiberadas') {
         opSoLiberadas = !opSoLiberadas;
-        try { localStorage.setItem('faturamento_op_top_liberadas', opSoLiberadas ? '1' : '0'); } catch (er) { /* sem armazenamento */ }
+        try { localStorage.setItem(LS_PREFIXO + 'faturamento_op_top_liberadas', opSoLiberadas ? '1' : '0'); } catch (er) { /* sem armazenamento */ }
         opDesenhar(); return;
     }
     const sem = t.closest && t.closest('#opFolha tr.op-sem');
@@ -3298,11 +3304,11 @@ async function gerarPrint(tipo, libs) {
 }
 
 // chave "Somente grupos liberados" do Resumo de Ganhos: preferência de cada pessoa (lembrada neste navegador)
-try { GAR.soLiberados = localStorage.getItem('faturamento_gar_so_liberados') === '1'; } catch (e) { GAR.soLiberados = false; }
+try { GAR.soLiberados = localStorage.getItem(LS_PREFIXO + 'faturamento_gar_so_liberados') === '1'; } catch (e) { GAR.soLiberados = false; }
 document.addEventListener('click', (e) => {
     if (e.target.id !== 'garSoLiberados') return;
     GAR.soLiberados = !GAR.soLiberados;
-    try { localStorage.setItem('faturamento_gar_so_liberados', GAR.soLiberados ? '1' : '0'); } catch (er) { /* sem armazenamento */ }
+    try { localStorage.setItem(LS_PREFIXO + 'faturamento_gar_so_liberados', GAR.soLiberados ? '1' : '0'); } catch (er) { /* sem armazenamento */ }
     garDesenharResumo();
 });
 
