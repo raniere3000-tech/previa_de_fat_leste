@@ -410,7 +410,7 @@ body.sem-pasta #btnPasta, body.sem-pasta #btnLimparCache { display: none; }
 <header class="top">
   <div class="top-linha">
     <div>
-      <div class="eyebrow">Águas do Rio • Relatório Executivo <span class="versao-nuvem"><span class="versao" id="versao">v115</span><button type="button" class="nuvem nuvem-erro" id="nuvem" title="Sem pasta conectada: as alterações ficam só neste navegador" aria-label="Situação do salvamento na nuvem"></button></span></div>
+      <div class="eyebrow">Águas do Rio • Relatório Executivo <span class="versao-nuvem"><span class="versao" id="versao">v116</span><button type="button" class="nuvem nuvem-erro" id="nuvem" title="Sem pasta conectada: as alterações ficam só neste navegador" aria-label="Situação do salvamento na nuvem"></button></span></div>
       <h1 id="titulo">Análise de Faturamento — Água e Esgoto</h1>
     </div>
     <div class="filtros" id="filtros">
@@ -568,7 +568,11 @@ body.sem-pasta #btnPasta, body.sem-pasta #btnLimparCache { display: none; }
 <script src="faturamento/assets/tarifa.js"></script>
 <script>
 (() => {
-  const VERSAO_SITE = "v115-20261020"; // muda a cada alteração: o selo do cabeçalho é derivado daqui
+  // Outros sites do mesmo endereço (raniere3000-tech.github.io) dividem o armazenamento do navegador com este: tudo o
+  // que é guardado aqui (pasta conectada, arquivos já lidos, edições) leva este prefixo para não misturar as pastas.
+  const ESCOPO = "previa_de_fat_leste";
+  window.ESCOPO_ARMAZENAMENTO = ESCOPO;            // o relatório (quadro) usa o mesmo prefixo
+  const VERSAO_SITE = "v116-20261020"; // muda a cada alteração: o selo do cabeçalho é derivado daqui
   try { document.getElementById("versao").textContent = VERSAO_SITE.split("-")[0]; } catch (e) {}
   const EXTENSOES = [".csv", ".xlsx", ".xls"];
   const SAIDAS = {
@@ -733,7 +737,7 @@ body.sem-pasta #btnPasta, body.sem-pasta #btnLimparCache { display: none; }
   // A cada 2 s o site olha a data do ajustes_relatorio.json: se outra pessoa salvou (o OneDrive trouxe o arquivo novo),
   // o relatório aberto relê a pasta e aplica. Ao voltar para a aba também confere na hora.
   let ultimaModificacao = null, canalAjustes = null;
-  try { canalAjustes = new BroadcastChannel("faturamento_ajustes"); canalAjustes.onmessage = () => avisaRelatorio(); } catch (e) { /* sem BroadcastChannel */ }
+  try { canalAjustes = new BroadcastChannel(ESCOPO + ":faturamento_ajustes"); canalAjustes.onmessage = () => avisaRelatorio(); } catch (e) { /* sem BroadcastChannel */ }
   function avisaRelatorio() {
     try { const w = quadro().hidden ? null : janela(); if (w && w.puxarTudoDaPasta) w.puxarTudoDaPasta(); } catch (e) {}
   }
@@ -763,7 +767,7 @@ body.sem-pasta #btnPasta, body.sem-pasta #btnLimparCache { display: none; }
 
   function pegaWorker() {
     if (!worker) {
-      worker = new Worker("analisador.worker.js?v=" + VERSAO_SITE);
+      worker = new Worker("analisador.worker.js?v=" + VERSAO_SITE + "&escopo=" + encodeURIComponent(ESCOPO));
       worker.onmessage = (e) => trataMensagem(e.data);
       worker.onerror = (e) => {
         worker = null;
@@ -792,7 +796,7 @@ body.sem-pasta #btnPasta, body.sem-pasta #btnLimparCache { display: none; }
   // Fase 1: ler a pasta até a conferência do Top 20 (0–52%). Fase 2: gerar o relatório (52–100%).
   // Usa o tempo da última execução neste navegador (quanto cada faixa da barra levou), ajustado ao ritmo de agora;
   // na primeira vez, sem histórico, projeta pelo ritmo da própria barra. O valor conta os segundos entre as mensagens.
-  const ETA_LS = "faturamento_eta_v1";
+  const ETA_LS = ESCOPO + ":faturamento_eta_v1";
   let eta = { fase: null, t0: null, pontos: [], fim: null, timer: null };
   const etaHistorico = () => { try { return JSON.parse(localStorage.getItem(ETA_LS) || "{}"); } catch (e) { return {}; } };
   function iniciaEta(fase) {
@@ -1038,7 +1042,7 @@ body.sem-pasta #btnPasta, body.sem-pasta #btnLimparCache { display: none; }
 
   // Guarda a pasta conectada no navegador (IndexedDB) para reabri-la sozinho nas próximas visitas
   const idb = {
-    open() { return new Promise((res, rej) => { const r = indexedDB.open("faturamento", 1); r.onupgradeneeded = () => r.result.createObjectStore("kv"); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); }); },
+    open() { return new Promise((res, rej) => { const r = indexedDB.open(ESCOPO + ":faturamento", 1); r.onupgradeneeded = () => r.result.createObjectStore("kv"); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); }); },
     async get(k) { try { const db = await this.open(); return await new Promise((res) => { const q = db.transaction("kv").objectStore("kv").get(k); q.onsuccess = () => res(q.result); q.onerror = () => res(null); }); } catch (e) { return null; } },
     async set(k, v) { try { const db = await this.open(); await new Promise((res) => { const t = db.transaction("kv", "readwrite"); t.objectStore("kv").put(v, k); t.oncomplete = res; t.onerror = res; }); } catch (e) {} },
   };
@@ -1175,7 +1179,7 @@ body.sem-pasta #btnPasta, body.sem-pasta #btnLimparCache { display: none; }
   // ===== Ajustes da etapa 2 guardados (pasta do SharePoint; sem pasta, só neste navegador) =====
   // A etapa 2 só abre quando algum arquivo foi lido agora (novo ou alterado desde a última análise neste navegador) ou pelo
   // botão "Etapa 2". Sem arquivo novo, a análise segue sozinha com os ajustes salvos — os mesmos para todos.
-  const LS_AJUSTES = "faturamento_ajustes_etapa2";
+  const LS_AJUSTES = ESCOPO + ":faturamento_ajustes_etapa2";
   let forcarEtapa2 = false, refTop20 = "";
   async function ajustesSalvos(ref) {
     const comp = window.arquivoCompartilhado;
@@ -1520,7 +1524,7 @@ body.sem-pasta #btnPasta, body.sem-pasta #btnLimparCache { display: none; }
   }
 
   // ===== Filtros de cada pessoa: guardados só neste navegador (não mudam a tela de mais ninguém) =====
-  const FILTROS_LS = "faturamento_filtros_pessoais";
+  const FILTROS_LS = ESCOPO + ":faturamento_filtros_pessoais";
   function lerFiltrosSalvos() { try { return JSON.parse(localStorage.getItem(FILTROS_LS) || "{}") || {}; } catch (e) { return {}; } }
   function salvaFiltros(extra) {
     const atual = Object.assign(lerFiltrosSalvos(), { sup: filtrosEstado.sup, ref: filtrosEstado.ref, mes: filtrosEstado.mes,
