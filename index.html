@@ -1,0 +1,1770 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Análise de Faturamento — Água e Esgoto</title>
+<!-- ícone da aba: gota em azul sobre quadrado marinho (cores do painel) -->
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PHJlY3Qgd2lkdGg9IjY0IiBoZWlnaHQ9IjY0IiByeD0iMTQiIGZpbGw9IiMxMDI4NDAiLz48cGF0aCBkPSJNMzIgOEMzMiA4IDE1IDI5IDE1IDQwYTE3IDE3IDAgMCAwIDM0IDBDNDkgMjkgMzIgOCAzMiA4eiIgZmlsbD0iIzE2YTViOCIvPjxwYXRoIGQ9Ik0yMy41IDQxYTguNSA4LjUgMCAwIDAgOC41IDguNSIgc3Ryb2tlPSIjZmZmIiBzdHJva2Utd2lkdGg9IjQuNSIgZmlsbD0ibm9uZSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+PC9zdmc+">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<meta name="description" content="Selecione a pasta com os arquivos e gere o relatório comparativo de água e esgoto no navegador.">
+<style>
+:root {
+  /* Paleta: #05050D | #1A2740 | #394D73 | #49668C | #F2F2F2 | laranja #E8710A (negativo) */
+  --preto: #05050D;
+  --marinho: #1A2740;
+  --azul: #394D73;
+  --azul-claro: #49668C;
+  --cinza: #F2F2F2;
+  --laranja: #E8710A;
+  --laranja-texto: #C2560C;
+  --text: #05050D;
+  --muted: #49668C;
+  --line: #DCE1E9;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  font-family: "IBM Plex Sans", "Segoe UI", system-ui, -apple-system, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  color: var(--text);
+  background: linear-gradient(135deg, var(--preto) 0%, var(--marinho) 55%, var(--azul) 100%);
+  background-attachment: fixed;
+  line-height: 1.55;
+}
+
+/* ===== Tela inicial ===== */
+.inicio {
+  min-height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 16px;
+}
+.painel {
+  width: 100%;
+  max-width: 620px;
+  background: #fff;
+  border-radius: 16px;
+  box-shadow: 0 20px 50px rgba(0,0,0,.25);
+  padding: 32px 32px 26px;
+}
+.badge {
+  display: inline-block;
+  font-size: 12px; font-weight: 600;
+  color: var(--azul);
+  background: #E1E7F0;
+  padding: 4px 12px; border-radius: 20px; margin-bottom: 12px;
+}
+h1 { margin: 0 0 8px; font-size: clamp(1.5rem, 4vw, 1.9rem); line-height: 1.2; font-weight: 600; letter-spacing: -.015em; color: var(--marinho); }
+.lead { margin: 0 0 22px; color: var(--muted); }
+
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  border: none; border-radius: 10px; cursor: pointer;
+  font: inherit; font-weight: 700; text-decoration: none;
+}
+.btn:disabled { opacity: .6; cursor: wait; }
+.btn:focus-visible { outline: 2px solid var(--azul-claro); outline-offset: 2px; }
+.btn-principal {
+  width: 100%; padding: 15px 20px; font-size: 1rem; font-weight: 600;
+  background: var(--marinho); color: #FFFFFF;
+}
+.btn-principal:hover:not(:disabled) { background: var(--azul); }
+.btn-secundario {
+  width: 100%; margin-top: 10px; padding: 11px 16px; font-size: .92rem;
+  background: #FFFFFF; color: var(--marinho); border: 1px solid var(--line);
+}
+.btn-secundario:hover:not(:disabled) { border-color: var(--azul-claro); color: var(--azul-claro); }
+
+.orientacoes { margin: 24px 0 0; padding: 18px 20px; background: var(--cinza); border-radius: 12px; }
+.orientacoes h2 { margin: 0 0 8px; font-size: .92rem; font-weight: 600; color: var(--marinho); }
+.orientacoes ul { margin: 0; padding-left: 18px; font-size: .9rem; }
+.orientacoes li { margin-bottom: 6px; }
+.orientacoes li:last-child { margin-bottom: 0; }
+code { font-family: Consolas, "Courier New", monospace; font-size: .9em; background: #E1E7F0; padding: 1px 5px; border-radius: 4px; }
+
+/* Progresso */
+.progresso { margin-top: 22px; }
+.progresso-topo { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; font-size: .95rem; }
+.progresso-topo b { color: var(--marinho); }
+.progresso-topo span { color: var(--muted); font-weight: 700; font-variant-numeric: tabular-nums; }
+.barra { height: 10px; background: #E1E7F0; border-radius: 6px; overflow: hidden; margin: 8px 0; }
+.barra-fill { height: 100%; width: 0; background: linear-gradient(90deg, var(--marinho), var(--azul-claro)); transition: width .3s; }
+.nota { margin: 0; font-size: .86rem; color: var(--muted); }
+.arquivos { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.arquivo { font-size: .78rem; background: #E1E7F0; color: var(--marinho); padding: 2px 10px; border-radius: 12px; }
+.progresso.erro .barra-fill { background: var(--laranja); }
+.progresso.erro .nota { color: var(--laranja-texto); font-weight: 600; }
+.log { margin-top: 10px; }
+.log summary { cursor: pointer; font-size: .85rem; color: var(--azul); font-weight: 600; }
+.log pre {
+  margin: 8px 0 0; max-height: 220px; overflow: auto; white-space: pre-wrap;
+  background: var(--preto); color: var(--cinza); padding: 12px; border-radius: 8px; font-size: .75rem;
+}
+
+.rodape { margin-top: 18px; text-align: center; font-size: .8rem; color: var(--muted); }
+.rodape a { color: var(--muted); }
+.link-btn { border: 0; background: none; padding: 0; font: inherit; color: var(--muted); text-decoration: underline; cursor: pointer; }
+
+/* ===== Relatório em tela cheia ===== */
+.visualizador { position: fixed; inset: 0; display: flex; flex-direction: column; background: var(--cinza); z-index: 10; }
+.barra-relatorio {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 8px 12px; background: var(--marinho); color: #FFFFFF;
+}
+.barra-relatorio .titulo { font-weight: 700; font-size: .92rem; margin-right: auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.btn-barra {
+  padding: 7px 12px; font-size: .82rem; font-weight: 600; border-radius: 6px;
+  background: rgba(255,255,255,.1); color: #FFFFFF; border: 1px solid rgba(255,255,255,.25);
+}
+.btn-barra:hover { background: rgba(255,255,255,.2); }
+#quadroRelatorio { flex: 1; width: 100%; border: 0; background: var(--cinza); }
+body.relatorio-aberto { overflow: hidden; }
+
+
+/* ===== Conferência do Top 20 ===== */
+.etapa-top20 { position: fixed; inset: 0; z-index: 9; background: linear-gradient(135deg, var(--preto) 0%, var(--marinho) 55%, var(--azul) 100%); overflow: hidden; padding: 12px 16px; display: flex; justify-content: center; align-items: stretch; }
+.painel-top20 { width: 100%; max-width: 1560px; min-height: 0; display: flex; flex-direction: column; background: #fff; border-radius: 12px; box-shadow: 0 20px 50px rgba(0,0,0,.25); padding: 12px 18px 10px; }
+.painel-top20 h2 { margin: 0; font-size: 1.05rem; font-weight: 600; color: var(--marinho); }
+.painel-top20 .badge { margin: 0 8px 0 0; font-size: 11px; padding: 2px 9px; vertical-align: middle; }
+.painel-top20 .lead { margin: 2px 0 8px; font-size: .8rem; line-height: 1.35; }
+.tabela-rolagem { flex: 1 1 auto; min-height: 0; overflow: auto; border: 1px solid var(--line); border-radius: 10px; }
+/* etapa 2: tabela de clientes + quadro com os totais por grupo de leitura ao lado */
+.corpo-top20 { flex: 1 1 auto; min-height: 0; display: flex; gap: 12px; }
+.corpo-top20 > .tabela-rolagem { min-width: 0; }
+.quadro-grupos { flex: 0 0 580px; min-height: 0; display: flex; flex-direction: column; gap: 8px; }
+.bloco-grupos { flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; background: #F7F9FC; }
+.quadro-grupos h3 { margin: 0; font-size: .9rem; color: var(--marinho); }
+.quadro-grupos p { margin: 2px 0 6px; font-size: .72rem; color: var(--muted); line-height: 1.3; }
+.bloco-grupos .rolagem-grupos { flex: 1 1 auto; min-height: 0; overflow: auto; }
+.tabela-grupos { width: 100%; border-collapse: collapse; font-size: .78rem; font-variant-numeric: tabular-nums; }
+.tabela-grupos th { position: sticky; top: 0; background: var(--marinho); color: #fff; font-weight: 600; padding: 4px 6px; text-align: left; white-space: nowrap; }
+.tabela-grupos thead tr + tr th { top: 23px; background: var(--azul, #1F5A96); font-weight: 500; font-size: .72rem; }
+.tabela-grupos th.grp { text-align: center; border-left: 1px solid rgba(255,255,255,.25); }
+.tabela-grupos td.ant { color: var(--muted); }
+.tabela-grupos th.num, .tabela-grupos td.num { text-align: right; }
+.tabela-grupos td { padding: 3px 6px; border-top: 1px solid var(--line); white-space: nowrap; }
+.tabela-grupos tr.alterado td { background: #FFF4EA; }
+.tabela-grupos tr.alterado td:first-child { box-shadow: inset 3px 0 0 var(--laranja); font-weight: 700; }
+.tabela-grupos tfoot td { position: sticky; bottom: 0; background: var(--marinho); color: #fff; font-weight: 700; }
+.tabela-grupos .neg { color: var(--laranja-texto); }
+.tabela-grupos tfoot .neg { color: #FFB37A; }
+.tabela-top20 td.ant { color: var(--muted); }
+@media (max-width: 1100px) { .corpo-top20 { flex-direction: column; } .quadro-grupos { flex: 0 0 auto; max-height: 60vh; } .bloco-grupos { flex: 0 0 auto; max-height: 30vh; } }
+.tabela-top20 { width: 100%; border-collapse: collapse; font-size: .84rem; }
+.tabela-top20 th { position: sticky; top: 0; z-index: 1; background: var(--marinho); color: #fff; font-weight: 600; text-align: left; padding: 6px 10px; white-space: nowrap; }
+.tabela-top20 th.num, .tabela-top20 td.num { text-align: right; }
+.tabela-top20 th.ordenavel { cursor: pointer; user-select: none; }
+.tabela-top20 th.ordenavel:hover { background: var(--azul); }
+.tabela-top20 .seta { font-size: .7rem; opacity: .9; }
+.tabela-top20 td { padding: 3px 10px; border-top: 1px solid var(--line); vertical-align: middle; }
+.tabela-top20 tr:nth-child(even) td { background: #F7F8FA; }
+.tabela-top20 td.cli { max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tabela-top20 input {
+  width: 110px; padding: 3px 8px; font: inherit; font-size: .82rem; text-align: right; font-variant-numeric: tabular-nums;
+  border: 1px solid var(--line); border-radius: 6px; background: #fff; color: var(--preto);
+}
+.tabela-top20 input:focus { outline: 2px solid var(--azul-claro); outline-offset: 0; border-color: var(--azul-claro); }
+.tabela-top20 input[type="checkbox"] { width: auto; height: auto; padding: 0; margin: 0 0 0 6px; vertical-align: -2px; cursor: pointer; accent-color: var(--laranja); }
+.tabela-top20 td.minimo, .tabela-top20 th.th-minimo { white-space: nowrap; }
+.tabela-top20 input.alterado { border-color: var(--laranja); background: #FFF4EA; }
+.tabela-top20 input.invalido { border-color: #B42318; background: #FDECEA; }
+.tabela-top20 .orig { display: none; font-size: .7rem; color: var(--muted); text-align: right; }
+.acoes-top20 { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line); flex: none; }
+.acoes-top20 .btn { padding: 8px 14px; font-size: .86rem; font-weight: 600; }
+.acoes-top20 .btn-principal { width: auto; }
+.acoes-top20 .btn-secundario { width: auto; margin-top: 0; }
+.acoes-top20 .contador { margin-left: auto; font-size: .86rem; color: var(--muted); }
+.acoes-top20 .contador b { color: var(--laranja-texto); }
+
+@media (max-width: 520px) {
+  .painel { padding: 24px 20px 20px; }
+  .barra-relatorio .titulo { flex-basis: 100%; }
+}
+
+/* ===== Layout v2: cabeçalho com "Conectar pasta" (mesmo padrão do DRE Unificado) ===== */
+body { background: var(--cinza); background-attachment: scroll; min-height: 100%; display: flex; flex-direction: column; height: auto; }
+html { height: 100%; }
+.top { background: linear-gradient(135deg, var(--preto) 0%, var(--marinho) 55%, var(--azul) 100%); color: #fff; padding: 16px 20px 12px; }
+.top-linha { display: flex; justify-content: space-between; align-items: center; gap: 12px 24px; flex-wrap: wrap; max-width: 1240px; margin: 0 auto; }
+.eyebrow { font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: #9FB4D6; }
+.versao { text-transform: none; display: inline-block; margin-left: 8px; padding: 1px 8px; border-radius: 10px; background: rgba(255,255,255,.15); color: #fff; letter-spacing: 0; }
+.top h1 { margin: 2px 0 0; color: #fff; font-size: clamp(1.2rem, 3vw, 1.6rem); }
+.ferramentas { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.btn-top { padding: 9px 14px; border-radius: 8px; font: inherit; font-size: .88rem; font-weight: 600; cursor: pointer; background: rgba(255,255,255,.12); color: #fff; border: 1px solid rgba(255,255,255,.3); text-decoration: none; }
+.btn-top:hover:not(:disabled) { background: rgba(255,255,255,.22); }
+.btn-top:disabled { opacity: .6; cursor: wait; }
+.btn-top:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+.fonte-status { max-width: 1240px; margin: 8px auto 0; font-size: .85rem; color: #C8D4EA; }
+.top .progresso { max-width: 1240px; margin: 8px auto 0; }
+.prog-linha { display: flex; align-items: center; gap: 12px; font-size: .85rem; color: #D5E0F2; }
+.prog-linha .barra { flex: 0 1 320px; width: 320px; height: 8px; margin: 0; background: rgba(255,255,255,.2); }
+.prog-linha b { color: #fff; font-variant-numeric: tabular-nums; min-width: 38px; }
+.top .nota { color: #C8D4EA; margin-top: 4px; }
+.top .arquivo { background: rgba(255,255,255,.15); color: #fff; }
+.top .progresso.erro .nota { color: #FFC9A0; }
+.top .log summary { color: #C8D4EA; }
+.log-ferramentas { margin-top: 6px; }
+.log-ferramentas button { font: inherit; font-size: .78rem; padding: 3px 10px; border-radius: 6px; cursor: pointer; background: rgba(255,255,255,.12); color: #fff; border: 1px solid rgba(255,255,255,.3); }
+.conteudo { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+.conteudo .orientacoes { max-width: 820px; width: calc(100% - 32px); margin: 24px auto; background: #fff; border: 1px solid var(--line); }
+#quadroRelatorio { flex: 1; width: 100%; min-height: calc(100vh - 150px); border: 0; background: var(--cinza); }
+body.relatorio-aberto { overflow: auto; }
+body.top20-aberto { overflow: hidden; }
+
+/* ===== Paleta e componentes do DRE_Unificado ===== */
+:root { --navy:#102840; --blue:#176b9c; --cyan:#16a5b8; --ink:#1f2d3d; --muted:#64748b; --line:#dbe4ec; --bg:#f3f6f9; }
+body { background: var(--bg); color: var(--ink); font-family: "Segoe UI", Arial, sans-serif; font-size: 14px; }
+.top { background: linear-gradient(120deg, var(--navy), #174f70); padding: 22px 34px 18px; }
+.top-linha, .fonte-status, .top .progresso { max-width: none; }
+.eyebrow { color: #9fe1e7; font-size: 11px; letter-spacing: 1.6px; font-weight: 700; }
+.versao { background: rgba(255,255,255,.16); border: 1px solid rgba(255,255,255,.4); font-size: 10.5px; letter-spacing: .6px; font-weight: 800; padding: 1px 9px; border-radius: 99px; }
+.top h1 { font-size: 26px; margin: 5px 0 3px; }
+.btn-top { border-radius: 8px; padding: 9px 12px; font-size: 13px; font-weight: 400; }
+.fgroup { display: flex; align-items: center; border: 1px solid rgba(255,255,255,.38); border-radius: 9px; background: rgba(255,255,255,.07); position: relative; }
+.fgroup[hidden] { display: none; }
+.fgroup .flabel { padding: 8px 10px; color: #d5e7ef; font-size: 10px; font-weight: 750; text-transform: uppercase; letter-spacing: .45px; }
+.fbtn { border: 0; border-left: 1px solid rgba(255,255,255,.25); background: transparent; color: #fff; padding: 8px 11px; font-size: 11px; font-weight: 800; cursor: pointer; }
+.fbtn:last-child { border-radius: 0 8px 8px 0; }
+.fbtn.active { background: #fff; color: #0d5f98; }
+.fgroup select { border: 0; border-left: 1px solid rgba(255,255,255,.25); border-radius: 0 8px 8px 0; background: transparent; color: #fff; padding: 8px 11px; font-size: 12px; cursor: pointer; }
+.fgroup select option { color: #111; }
+.dropdown { position: relative; display: inline-block; }
+.menu-pdf { position: relative; display: inline-block; }
+.barra-dados { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 12px 16px; background: var(--marinho); border-bottom: 1px solid rgba(255,255,255,.15); }
+.barra-dados[hidden] { display: none; }
+.barra-dados .menu-pdf-lista { left: 0; right: auto; }
+@media (max-width: 640px) { .barra-dados { padding: 10px; gap: 6px; } .barra-dados .btn-top { padding: 8px 10px; font-size: 12.5px; } }
+.menu-pdf-lista { position: absolute; right: 0; top: 100%; margin-top: 6px; z-index: 40; background: #fff; border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 8px 22px rgba(17,42,66,.18); padding: 6px 0; min-width: 250px; }
+.menu-pdf-lista[hidden] { display: none; }
+#menuPdf button { display: block; width: 100%; text-align: left; border: 0; background: transparent; color: var(--ink); font: inherit; font-size: 13.5px; font-weight: 600; padding: 9px 14px; cursor: pointer; }
+#menuPdf button:hover, #menuPdf button:focus-visible { background: #f2f8fc; outline: none; }
+.menu-pdf-lista small { display: block; font-weight: 400; font-size: 11.5px; color: #5b6b80; margin-top: 2px; }
+.dropdown > button { border: 0; border-left: 1px solid rgba(255,255,255,.25); border-radius: 0 8px 8px 0; background: transparent; color: #fff; padding: 8px 11px; font-size: 12px; font-weight: 700; cursor: pointer; }
+.dropdown-content { display: none; position: absolute; right: 0; background: #fff; color: var(--ink); min-width: 220px; border: 1px solid var(--line); box-shadow: 0 8px 22px rgba(17,42,66,.18); border-radius: 10px; z-index: 30; padding: 8px 0; max-height: 300px; overflow-y: auto; margin-top: 6px; }
+.dropdown-content label { display: block; padding: 7px 14px; font-size: 12.5px; cursor: pointer; white-space: nowrap; }
+.dropdown-content label:hover { background: #f2f8fc; }
+.dropdown-content hr { margin: 6px 0; border: none; border-top: 1px solid var(--line); }
+.dropdown.aberto .dropdown-content { display: block; }
+.fonte-status { margin-top: 10px; font-size: 11.5px; color: #bfe0eb; }
+.prog-linha .barra { height: 12px; border-radius: 8px; width: 380px; flex-basis: 380px; max-width: 60vw; }
+.prog-linha .barra-fill { background: linear-gradient(90deg, #16a5b8, #7ee0bc); }
+.top .progresso.erro .barra-fill { background: #e06a6a; }
+.top .log summary { font-size: 12px; font-weight: 700; color: #bfe0eb; }
+.top .log pre { background: rgba(0,0,0,.28); color: #e6f2f8; font: 11.5px/1.5 Consolas, "Courier New", monospace; }
+.nav { padding: 0 34px; background: #fff; border-bottom: 1px solid var(--line); display: flex; gap: 2px; overflow: auto; }
+.nav[hidden] { display: none; }
+.tab { border: 0; background: none; padding: 14px 18px; color: var(--muted); font-weight: 650; font-size: 14px; cursor: pointer; border-bottom: 3px solid transparent; white-space: nowrap; font-family: inherit; }
+.tab.active { color: var(--blue); border-bottom-color: var(--cyan); }
+.conteudo .orientacoes { border-radius: 12px; }
+#quadroRelatorio { background: var(--bg); min-height: calc(100vh - 230px); }
+.btn-principal { background: var(--navy); } .btn-principal:hover:not(:disabled) { background: var(--blue); }
+@media (max-width: 900px) { .top, .nav { padding-left: 16px; padding-right: 16px; } }
+
+.vazio-wrap { max-width: 1800px; width: 100%; margin: 0 auto; padding: 22px 34px 38px; }
+.vazio-wrap[hidden] { display: none; }
+.painel-vazio { background: #fff; border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 3px 12px rgba(17,42,66,.045); padding: 18px; }
+.painel-vazio h2 { font-size: 16px; margin: 0 0 3px; color: var(--navy); }
+.painel-vazio .dica { color: var(--muted); font-size: 12px; margin-bottom: 12px; }
+.vazio { padding: 34px; text-align: center; color: var(--muted); border: 1px dashed #b8c5cf; border-radius: 10px; background: #fafcfd; }
+.vazio b { color: var(--navy); }
+.esperados { margin: 16px 0 0; padding-left: 18px; font-size: 12.5px; color: var(--muted); }
+.esperados li { margin-bottom: 5px; }
+.painel-vazio .rodape { text-align: left; margin: 12px 0 0; }
+.top .log { max-width: none; margin-top: 8px; }
+@media (max-width: 900px) { .vazio-wrap { padding-left: 16px; padding-right: 16px; } }
+
+/* ===== Visual simples: filtros em listas suspensas ===== */
+.filtros { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; margin-top: 14px; }
+.fsel { display: flex; flex-direction: column; gap: 3px; font-size: 10px; font-weight: 750; text-transform: uppercase; letter-spacing: .45px; color: #c8d6e5; transition: opacity .15s; }
+.fsel.inativo { opacity: .4; }
+.fsel select, .fsel .dropdown > button { min-width: 150px; border: 1px solid rgba(255,255,255,.35); border-radius: 8px; background: rgba(255,255,255,.1); color: #fff; padding: 8px 10px; font: inherit; font-size: 13px; font-weight: 400; text-transform: none; letter-spacing: 0; text-align: left; cursor: pointer; }
+.fsel select:disabled, .fsel .dropdown > button:disabled { cursor: default; opacity: .7; }
+.fsel select option { color: #111; }
+.dropdown-content { left: 0; right: auto; }
+.top h1 { margin-bottom: 0; }
+.top .progresso { margin-top: 12px; }
+
+/* ===== Compacto: título, filtros e abas ocupam menos espaço; a 1ª informação cabe na tela (1366×768) ===== */
+.top { padding: 8px 20px 8px; }
+.top-linha { gap: 6px 16px; }
+.top h1 { font-size: 15px; margin: 0; line-height: 1.25; }
+.eyebrow { font-size: 10px; letter-spacing: 1.2px; }
+.versao { font-size: 9.5px; padding: 0 7px; margin-left: 6px; }
+/* nuvem ao lado da versão: ✓ = alterações salvas na pasta do SharePoint · ✕ = não salvas (clique para sincronizar) */
+.versao-nuvem { white-space: nowrap; display: inline-flex; align-items: center; }
+.nuvem { display: inline-flex; align-items: center; justify-content: center; vertical-align: middle; margin-left: 6px; width: 30px; height: 20px;
+         padding: 0; border: 0; border-radius: 6px; background: transparent; cursor: pointer; color: #fff; }
+.nuvem:hover, .nuvem:focus-visible { background: rgba(255,255,255,.18); outline: none; }
+.nuvem svg { width: 26px; height: 18px; display: block; }
+.nuvem .marca-ok { color: #86efac; } .nuvem .marca-erro { color: #fca5a5; }
+.nuvem.girando svg { animation: nuvemPulsa 1s ease-in-out infinite; }
+@keyframes nuvemPulsa { 50% { opacity: .45; } }
+#avisoSite { display: none; position: fixed; right: 16px; bottom: 16px; z-index: 9999; background: #1A2740; color: #fff; padding: 9px 14px;
+             border-radius: 8px; font-size: 12.5px; font-weight: 600; box-shadow: 0 6px 20px rgba(0,0,0,.2); max-width: 420px; }
+#avisoSite.erro { background: #9a3412; }
+.btn-top { padding: 5px 10px; font-size: 12px; }
+.filtros { margin-top: 6px; gap: 6px 14px; align-items: center; }
+.fsel { flex-direction: row; align-items: center; gap: 6px; font-size: 9.5px; }
+.fsel select, .fsel .dropdown > button { min-width: 120px; padding: 4px 8px; font-size: 12px; }
+.top .progresso { margin-top: 6px; }
+.prog-linha .barra { height: 8px; }
+.fonte-status { margin-top: 4px; }
+.nav { padding: 0 20px; }
+.tab { padding: 7px 14px; font-size: 13px; }
+.vazio-wrap { padding: 12px 20px 16px; }
+.painel-vazio { padding: 12px 16px; }
+.painel-vazio h2 { font-size: 14px; }
+.painel-vazio .dica { margin-bottom: 8px; }
+.vazio { padding: 16px; }
+.esperados { margin-top: 10px; font-size: 12px; }
+.esperados li { margin-bottom: 3px; }
+.painel-vazio .rodape { margin-top: 8px; }
+
+/* ===== Cabeçalho no mesmo layout do DRE Unificado: título à esquerda, filtros e botões à direita, na mesma linha ===== */
+.top-linha { flex-wrap: wrap; align-items: center; gap: 8px 14px; }   /* o que não couber (botões) desce para a linha de baixo, alinhado à direita */
+.fonte-status[hidden] { display: none; }
+.ferramentas { flex: 0 1 auto; flex-wrap: wrap; justify-content: flex-end; margin-left: auto; }
+.filtros { flex-wrap: nowrap; }
+.top-linha h1 { white-space: nowrap; }
+.fsel select, .fsel .dropdown > button { padding: 5px 6px; max-width: 102px; text-overflow: ellipsis; }
+.fsel > span { padding: 4px 5px; letter-spacing: .2px; font-size: 9px; }
+.top { padding-right: 14px; }
+.fsel .dropdown > button { white-space: nowrap; }
+.filtros { gap: 6px; }
+.ferramentas { gap: 6px; }
+.ferramentas button, .ferramentas .btn { padding: 5px 6px; font-size: 12px; white-space: nowrap; }
+.top-linha h1 { font-size: 14px; }
+
+.top-linha > div:first-child { flex: 0 1 auto; }
+.filtros { margin: 0; flex: 1 1 auto; justify-content: flex-end; gap: 6px 10px; align-items: center; }
+.fsel { flex-direction: row; align-items: center; gap: 0; border: 1px solid rgba(255,255,255,.38); border-radius: 9px; background: rgba(255,255,255,.07); position: relative; color: #d5e7ef; font-size: 9.5px; font-weight: 750; letter-spacing: .45px; text-transform: uppercase; }
+.fsel > span { padding: 4px 8px; }
+.fsel select, .fsel .dropdown > button { min-width: 0; border: 0; border-left: 1px solid rgba(255,255,255,.25); border-radius: 0 8px 8px 0; background: transparent; padding: 5px 9px; font-size: 12px; font-weight: 700; color: #fff; text-transform: none; letter-spacing: 0; }
+.fsel select { font-weight: 400; }
+.ferramentas { gap: 6px 10px; }
+.fonte-status { margin: 4px 0 0; font-size: 11px; }
+.top .progresso { margin-top: 4px; }
+/* o relatório ocupa o resto da tela e rola por dentro */
+body.relatorio-aberto { height: 100vh; overflow: hidden; }
+body.relatorio-aberto .conteudo { min-height: 0; }
+#quadroRelatorio { min-height: 0; }
+.filtros-top20 { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; margin: 0 0 8px; flex: none; }
+.filtros-top20 input { width: 100%; max-width: 340px; padding: 5px 10px; font: inherit; font-size: .82rem; border: 1px solid var(--line); border-radius: 8px; }
+.sup-top20 { display: inline-flex; align-items: center; gap: 6px; font-size: .82rem; font-weight: 600; color: var(--navy, #102840); }
+.sup-top20 select { font: inherit; font-weight: 400; padding: 4px 8px; border: 1px solid var(--line); border-radius: 8px; }
+/* tempo estimado */
+.eta { margin-left: 14px; white-space: nowrap; font-weight: 700; color: #ffd166; font-variant-numeric: tabular-nums; }
+.eta[hidden] { display: none; }
+/* etapas da geração (gráficos, tabelas, KPIs) */
+.etapas { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 11.5px; color: #C8D4EA; }
+.etapas[hidden] { display: none; }
+.etapas li { display: inline-flex; align-items: center; gap: 5px; }
+.etapas li span { font-weight: 800; }
+.etapas li.ok span { color: #7ee0bc; }
+.etapas li.atual { color: #fff; font-weight: 700; }
+.etapas li.atual span { color: #ffd166; animation: pulsa 1s infinite alternate; }
+@keyframes pulsa { from { opacity: .35; } to { opacity: 1; } }
+
+/* ===== Celular / telas estreitas: cabeçalho em várias linhas, filtros e botões ocupando a largura, alvos de toque maiores ===== */
+.so-celular { display: none; margin-bottom: 10px; }
+#btnFiltrosCel { display: none; }
+@media (max-width: 1200px) {                 /* tablet / notebook pequeno: o cabeçalho quebra em linhas em vez de vazar */
+  .top-linha { flex-wrap: wrap; }
+  .top-linha h1 { white-space: normal; }
+  .filtros, .ferramentas { flex-wrap: wrap; }
+}
+@media (max-width: 760px) {
+  .top { padding: 8px 12px; }
+  .top-linha { flex-wrap: wrap; gap: 6px; }
+  .top-linha > div:first-child { flex: 1 1 100%; min-width: 0; }
+  .top-linha h1 { white-space: normal; font-size: 14px; }
+  .filtros { flex-wrap: wrap; width: 100%; gap: 6px; }
+  .fsel { flex: 1 1 calc(50% - 6px); min-width: 0; }
+  .fsel > span { flex: none; }
+  .fsel select, .fsel .dropdown > button { flex: 1 1 0; min-width: 0; max-width: none; padding: 7px 8px; font-size: 13px; }
+  .fsel .dropdown { flex: 1 1 0; min-width: 0; } .fsel .dropdown > button { width: 100%; }
+  .ferramentas { flex-wrap: wrap; width: 100%; gap: 6px; }
+  .ferramentas button, .ferramentas .btn-top { flex: 1 1 calc(33% - 6px); min-width: 0; text-align: center; padding: 8px 4px; font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #btnFiltrosCel { display: inline-block; }
+  .top:not(.filtros-abertos) .filtros { display: none; }   /* filtros recolhidos atrás do botão "Filtros" */
+  #btnFiltrosCel[aria-expanded="true"] { background: rgba(255,255,255,.28); }
+  .top .fonte-status { font-size: 11px; }
+  .nav { padding: 0 6px; }
+  .tab { padding: 10px 12px; font-size: 13.5px; }
+  .vazio-wrap { padding: 10px 12px 16px; }
+  body.relatorio-aberto { height: 100dvh; }
+  #avisoSite { left: 12px; right: 12px; max-width: none; }
+  .so-celular { display: block; }
+}
+body.sem-pasta #btnPasta, body.sem-pasta #btnLimparCache { display: none; }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="top-linha">
+    <div>
+      <div class="eyebrow">Águas do Rio • Relatório Executivo <span class="versao-nuvem"><span class="versao" id="versao">v114</span><button type="button" class="nuvem nuvem-erro" id="nuvem" title="Sem pasta conectada: as alterações ficam só neste navegador" aria-label="Situação do salvamento na nuvem"></button></span></div>
+      <h1 id="titulo">Análise de Faturamento — Água e Esgoto</h1>
+    </div>
+    <div class="filtros" id="filtros">
+      <label class="fsel" id="fgSup"><span>Superintendência</span><select id="selSupTop" disabled><option>—</option></select></label>
+      <label class="fsel" id="fgRef" title="Escolha até duas planilhas de orçado para comparar (Δ % e Δ R$)"><span>Comparar</span><select id="selRef1Top" disabled><option>—</option></select><select id="selRef2Top" disabled><option>—</option></select></label>
+      <label class="fsel" id="fgMes"><span>Mês</span><select id="selMesTop" disabled><option>—</option></select></label>
+      <div class="fsel" id="fgGrupo"><span>Grupo</span>
+        <div class="dropdown" id="ddGrupo"><button type="button" id="btnGrupo" disabled>Todos ▾</button><div class="dropdown-content" id="listaGrupos"></div></div></div>
+    </div>
+    <div class="ferramentas">
+      <span id="downloads" style="display:contents"></span>
+      <button type="button" class="btn-top" id="btnPasta">📁 Conectar pasta</button>
+      <button type="button" class="btn-top" id="btnFiltrosCel" aria-expanded="false" aria-controls="filtros" title="Mostrar ou esconder os filtros">⚙ Filtros</button>
+      <button type="button" class="btn-top" id="btnAbrirRel" title="Abrir um relatório já gerado (Relatorio_Faturamento.html, salvo na pasta a cada relatório gerado no computador) — é o jeito de ver no celular">📄 Abrir relatório</button>
+      <input type="file" id="inputRelatorio" accept=".html,.htm,.json,text/html,application/json" multiple hidden>
+      <a class="btn-top" href="https://raniere3000-tech.github.io/bookcomercial/">🏠 Menu</a>
+      <button type="button" class="btn-top" id="btnAtualizar" hidden>↻ Atualizar</button>
+      <input type="file" id="inputPasta" webkitdirectory directory multiple hidden>
+    </div>
+  </div>
+  <div class="fonte-status" id="fonteStatus">Nenhuma pasta conectada.</div>
+  <div class="progresso" id="progresso" hidden>
+    <div class="prog-linha"><div class="barra"><div class="barra-fill" id="barraFill"></div></div><b id="statusPct">0%</b><span id="statusTexto">Preparando…</span><span class="eta" id="statusEta" hidden></span></div>
+    <p class="nota" id="statusNota"></p>
+    <ol class="etapas" id="listaEtapas" hidden aria-live="polite"></ol>
+    <div class="arquivos" id="listaArquivos" hidden></div>
+    <details class="log">
+      <summary>Detalhes da leitura</summary>
+      <div class="log-ferramentas"><button type="button" id="btnCopiarLog">Copiar detalhes</button></div>
+      <pre id="logExecucao">Nenhuma leitura realizada ainda.</pre>
+    </details>
+  </div>
+</header>
+
+<nav class="nav" id="nav" aria-label="Páginas do relatório">
+  <button class="tab active" data-view="resumo" type="button">Resumo</button>
+  <button class="tab" data-view="tabelas" type="button">Diretas</button>
+  <button class="tab" data-view="analise" type="button">Análise</button>
+  <button class="tab" data-view="indiretas" type="button">Indiretas</button>
+  <button class="tab" data-view="forecast" type="button">Forecast</button>
+  <button class="tab" data-view="dre" type="button">DRE</button>
+  <button class="tab" data-view="garantia" type="button">Garantia</button>
+  <button class="tab" data-view="plano" type="button">Plano de ação</button>
+  <button class="tab" data-view="onepage" type="button">One page</button>
+  <button class="tab" data-view="dados" type="button">Dados</button>
+</nav>
+
+<main class="conteudo" id="inicio">
+  <div class="vazio-wrap" id="vazioWrap">
+    <div class="painel-vazio">
+      <h2 id="vazioTitulo">DRE: orçado × realizado</h2>
+      <div class="dica" id="vazioDica">Realizado do mês contra o orçado RF e o orçado SUP, por superintendência</div>
+      <div class="vazio so-celular"><b>No celular:</b> toque em <b>📄 Abrir relatório</b> e escolha o arquivo <code>Relatorio_Faturamento.html</code> na pasta do OneDrive/SharePoint.<br>
+        Ele é salvo na pasta sozinho sempre que o relatório é gerado no computador, com os ajustes do dia.</div>
+      <div class="vazio"><b>Sem dados para o período.</b><br>Conecte a pasta com os arquivos (fatura, consumo, cronograma, serviço avulso e orçados RF) usando o botão <b>📁 Conectar pasta</b>.</div>
+      <ul class="esperados">
+        <li><b>Fatura</b>, <b>consumo</b> (com o mês no nome, ex.: <code>Consumo 09-2026.csv</code>) e <b>cronograma</b> — CSV, XLSX ou XLS, do mês atual e do anterior.</li>
+        <li><b>Serviço avulso</b> (nome com "avulso") para as indiretas; <b>RF</b> (ex.: <code>RF01T26.xlsx</code>) e <b>RF SUP</b> para o orçado.</li>
+        <li>Tudo é processado no seu navegador; nenhum arquivo é enviado para servidor. Na primeira vez, o carregamento leva cerca de 1 minuto.</li>
+      </ul>
+      <p class="rodape"><a href="acompanhamento_faturamento.py" download>Baixar o script Python</a> ·
+        <button type="button" class="link-btn" id="btnLimparCache" title="Os arquivos já lidos ficam guardados no navegador para a próxima análise ser mais rápida. Apagar força a leitura completa.">Limpar arquivos guardados</button></p>
+    </div>
+  </div>
+  <!-- botões de gerar arquivos (Etapa 2, Executivo, Prints, One page, Acompanhamento): ficam no início da aba Dados -->
+  <div class="barra-dados" id="barraDados" hidden>
+    <button type="button" class="btn-top" id="btnEtapa2" hidden title="Reler a pasta e abrir a conferência dos clientes em análise (etapa 2), mesmo sem arquivo novo">✎ Etapa 2</button>
+    <span class="menu-pdf" id="menuPdfWrap"><button type="button" class="btn-top" id="btnPdf" hidden aria-haspopup="true" aria-expanded="false" aria-controls="menuPdf" title="PDF executivo conforme os filtros da tela">📄 Executivo ▾</button>
+      <span class="menu-pdf-lista" id="menuPdf" role="menu" hidden>
+        <button type="button" role="menuitem" data-modo="celular">📱 Para ler no celular<small>Folha em pé, letra grande, colunas principais</small></button>
+        <button type="button" role="menuitem" data-modo="a4">🖨 A4 para imprimir<small>Folhas deitadas, com todas as colunas</small></button>
+      </span></span>
+    <span class="menu-pdf" id="menuPrintWrap"><button type="button" class="btn-top" id="btnPrint" hidden aria-haspopup="true" aria-expanded="false" aria-controls="menuPrint" title="Imagem em alta resolução de um quadro do painel, para colar na apresentação">🖼 Prints ▾</button>
+      <span class="menu-pdf-lista" id="menuPrint" role="menu" hidden>
+        <button type="button" role="menuitem" data-print="dre">DRE<small>Realizado + Forecast, sem a coluna Forecast</small></button>
+        <button type="button" role="menuitem" data-print="garantia">Análise de Garantia<small>Totais, resumo e garantia por grupo</small></button>
+        <button type="button" role="menuitem" data-print="indiretas">Faturamento Indireto e Plano de Ação<small>Indiretas (R$) e, abaixo, o plano do mês</small></button>
+      </span></span>
+    <button type="button" class="btn-top" id="btnOnePage" hidden title="One page (acompanhamento do faturamento em uma página, conforme os filtros da tela)">📊 One page</button>
+    <button type="button" class="btn-top" id="btnAcomp" hidden title="Baixar as tabelas da planilha de Acompanhamento Mensal (Excel, uma aba por tabela) da Superintendência escolhida">📥 Acompanhamento</button>
+  </div>
+  <iframe id="quadroRelatorio" title="Relatório comparativo de água e esgoto" hidden></iframe>
+</main>
+
+<div class="etapa-top20" id="etapaTop20" hidden>
+  <div class="painel-top20">
+    <h2 id="top20Titulo"><span class="badge">Etapa 2 · Conferência</span><span id="top20TituloTexto"></span></h2>
+    <p class="lead"><span id="textoFiltro"></span>Maiores <b>Consumo Faturado</b> do mês atual. Se quiser, altere o consumo ou o valor total (água + esgoto) de algum cliente. Ao aplicar, toda a análise e a comparação usam os valores alterados. Os arquivos da pasta não são modificados.</p>
+    <p class="nota" id="notaLeitura" hidden style="flex:none;margin:0 0 6px;font-size:.78rem;color:var(--muted);"></p>
+    <p class="nota nota-ajustes" id="notaAjustes" hidden style="flex:none;color:var(--azul, #1e40af);font-weight:600;font-size:.8rem;margin:0 0 6px;"></p>
+    <p class="nota" id="avisoTop20" hidden style="flex:none;color:var(--laranja-texto);font-weight:600;font-size:.8rem;margin:0 0 6px;">A coluna "Situacao Conta" não foi encontrada nos arquivos, então abaixo aparece o Top 20 de maior consumo de todas as contas.</p>
+    <div class="filtros-top20">
+      <input type="search" id="buscaTop20" placeholder="Filtrar por ligação, cliente ou grupo…" aria-label="Filtrar clientes">
+      <label class="sup-top20">Superintendência <select id="supTop20" aria-label="Filtrar por superintendência"><option value="">Todas</option></select></label>
+    </div>
+    <div class="corpo-top20">
+    <div class="tabela-rolagem">
+      <table class="tabela-top20">
+        <thead><tr>
+          <th>#</th><th>Ligação</th><th>Grupo</th><th>SUP</th><th>Cliente</th><th>Categoria</th><th>Situação conta</th>
+          <th class="num" title="Quantidade de economias da ligação no mês">Economias</th>
+          <th class="num th-minimo" title="Mínimo da ligação pela estrutura tarifária (m³). Marque para jogar o consumo para o mínimo; o valor é recalculado pela tarifa.">Mínimo (m³) <input type="checkbox" id="chkMinTodos" title="Marcar/desmarcar o mínimo em todas as ligações visíveis" aria-label="Jogar todas as ligações visíveis para o mínimo"></th>
+          <th class="num" id="thConsumoAnt" title="Consumo Faturado no mês anterior">Consumo mês ant.</th>
+          <th class="num ordenavel" data-ordem="consumo" tabindex="0" title="Ordenar">Consumo Faturado (m³) <span class="seta"></span></th>
+          <th class="num" id="thValorAnt" title="Valor total no mês anterior">Valor mês ant.</th>
+          <th class="num ordenavel" data-ordem="valor" tabindex="0" title="Ordenar">Valor total (R$) <span class="seta"></span></th>
+        </tr></thead>
+        <tbody id="corpoTop20"></tbody>
+      </table>
+    </div>
+    <aside class="quadro-grupos" aria-label="Totais por grupo de leitura">
+      <section class="bloco-grupos">
+      <h3>Totais por grupo de leitura</h3>
+      <p id="notaGrupos">Soma de todas as ligações de cada grupo no mês, já com as alterações feitas na tabela (grupo alterado em laranja).</p>
+      <div class="rolagem-grupos">
+        <table class="tabela-grupos">
+          <thead>
+            <tr><th rowspan="2">Grupo</th><th colspan="2" class="grp">Consumo (m³)</th><th colspan="2" class="grp">Faturamento (R$)</th>
+                <th rowspan="2" class="num th-delta" title="Faturamento do mês contra o mês anterior">Δ fat.</th></tr>
+            <tr><th class="num mes-at">Atual</th><th class="num mes-ant">Anterior</th>
+                <th class="num mes-at">Atual</th><th class="num mes-ant">Anterior</th></tr>
+          </thead>
+          <tbody id="corpoGrupos"></tbody>
+          <tfoot id="totalGrupos"></tfoot>
+        </table>
+      </div>
+      </section>
+      <section class="bloco-grupos">
+      <h3>Clientes em análise por grupo</h3>
+      <p>Soma só dos clientes da tabela ao lado (em análise), com as alterações; mês anterior das mesmas ligações.</p>
+      <div class="rolagem-grupos">
+        <table class="tabela-grupos">
+          <thead>
+            <tr><th rowspan="2">Grupo</th><th rowspan="2" class="num" title="Clientes em análise do grupo">Clientes</th><th colspan="2" class="grp">Consumo (m³)</th><th colspan="2" class="grp">Faturamento (R$)</th>
+                <th rowspan="2" class="num th-delta" title="Faturamento do mês contra o mês anterior">Δ fat.</th></tr>
+            <tr><th class="num mes-at">Atual</th><th class="num mes-ant">Anterior</th>
+                <th class="num mes-at">Atual</th><th class="num mes-ant">Anterior</th></tr>
+          </thead>
+          <tbody id="corpoGruposAnalise"></tbody>
+          <tfoot id="totalGruposAnalise"></tfoot>
+        </table>
+      </div>
+      </section>
+    </aside>
+    </div>
+    <div class="acoes-top20">
+      <button type="button" class="btn btn-principal" id="btnAplicar">Aplicar alterações e gerar relatório</button>
+      <button type="button" class="btn btn-secundario" id="btnRestaurar">Restaurar originais</button>
+      <button type="button" class="btn btn-secundario" id="btnPular">Pular, usar valores originais</button>
+      <span class="contador" id="contadorTop20"></span>
+    </div>
+  </div>
+</div>
+
+<script src="faturamento/assets/tarifa.js"></script>
+<script>
+(() => {
+  const VERSAO_SITE = "v114-20261020"; // muda a cada alteração: o selo do cabeçalho é derivado daqui
+  try { document.getElementById("versao").textContent = VERSAO_SITE.split("-")[0]; } catch (e) {}
+  const EXTENSOES = [".csv", ".xlsx", ".xls"];
+  const SAIDAS = {
+    "Relatorio_Comparativo.html": { rotulo: "", tipo: "text/html" },
+    "Top100_Quedas_Consumo.xlsx": { rotulo: "Baixar Top 100 (Excel)", tipo: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" },
+    "Base_Compilada_HISTORICO.xlsx": { rotulo: "", tipo: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" },
+  };
+  const MESES = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
+
+  const $ = (id) => document.getElementById(id);
+  const btnPasta = $("btnPasta"), btnAtualizar = $("btnAtualizar"), btnEtapa2 = $("btnEtapa2");
+  const inputPasta = $("inputPasta"), progresso = $("progresso");
+
+  let worker = null;
+  let pastaHandle = null;
+  let rodando = false;
+
+  // ===== Tudo o que é editado no relatório fica num arquivo só da pasta conectada (sincronizada com o SharePoint):
+  // ajustes_relatorio.json — justificativas, forecast editado, Situação dos grupos e ajustes da etapa 2.
+  // O arquivo antigo das justificativas (justificativas_relatorio.json) é lido e incorporado na primeira vez.
+  // As gravações passam por uma fila: duas alterações seguidas não se atropelam.
+  const ARQ_AJUSTES = "ajustes_relatorio.json", ARQ_JUST_ANTIGO = "justificativas_relatorio.json";
+  let filaGravacao = Promise.resolve();
+  async function permissaoGravar() {
+    let perm = await pastaHandle.queryPermission({ mode: "readwrite" });
+    if (perm !== "granted") perm = await pastaHandle.requestPermission({ mode: "readwrite" });
+    return perm === "granted";
+  }
+  async function lerJson(nome) {
+    try {
+      const texto = await (await (await pastaHandle.getFileHandle(nome)).getFile()).text();
+      return texto.trim() ? JSON.parse(texto) : {};
+    } catch (e) {
+      if (e && e.name === "NotFoundError") return {};
+      throw e;
+    }
+  }
+  // ===== Cópia do relatório na pasta (para abrir no celular, onde não dá para conectar a pasta) =====
+  // Relatorio_Faturamento.html = o relatório gerado + os ajustes do momento (forecast, situação, garantia, justificativas...)
+  // embutidos em <script id="ajustes-copia">; no celular o relatório lê esses ajustes (somente leitura).
+  const ARQ_COPIA = "Relatorio_Faturamento.html";
+  let htmlAtual = null, timerCopia = null;
+  const RE_COPIA = /<script type="application\/json" id="ajustes-copia"[^>]*>[\s\S]*?<\/script>/;
+  function comAjustes(html, ajustes) {
+    const tag = `<script type="application/json" id="ajustes-copia" data-salvo="${new Date().toISOString()}">`
+      + JSON.stringify(ajustes || {}).replace(/</g, "\\u003c") + "<\/script>";
+    html = html.replace(RE_COPIA, "");
+    const i = html.indexOf("</head>");
+    return i >= 0 ? html.slice(0, i) + tag + html.slice(i) : tag + html;
+  }
+  async function salvaCopia() {
+    timerCopia = null;
+    if (!htmlAtual || !pastaHandle) return;
+    try {
+      if ((await pastaHandle.queryPermission({ mode: "readwrite" })) !== "granted") return;   // não pede permissão só para a cópia
+      const ajustes = await lerUnificado().catch(() => ({}));
+      const fh = await pastaHandle.getFileHandle(ARQ_COPIA, { create: true });
+      const w = await fh.createWritable();
+      await w.write(comAjustes(htmlAtual, ajustes));
+      await w.close();
+    } catch (e) { console.warn("Cópia do relatório para o celular não foi salva", e); }
+  }
+  function agendaCopia(ms) { if (!htmlAtual) return; clearTimeout(timerCopia); timerCopia = setTimeout(salvaCopia, ms); }
+
+  async function lerUnificado() {
+    const d = await lerJson(ARQ_AJUSTES);
+    if (!d.justificativas) {
+      const antigo = await lerJson(ARQ_JUST_ANTIGO).catch(() => ({}));
+      if (Object.keys(antigo).length) d.justificativas = antigo;
+    }
+    return d;
+  }
+  window.arquivoCompartilhado = {
+    disponivel: () => !!pastaHandle,
+    pasta: () => (pastaHandle ? pastaHandle.name : ""),
+    async ler() {
+      if (!pastaHandle) return null;
+      try {
+        if ((await pastaHandle.queryPermission({ mode: "read" })) !== "granted") return null;
+        return await lerUnificado();
+      } catch (e) { console.warn("Ajustes compartilhados: leitura falhou", e); return null; }
+    },
+    // altera(dados) muda o objeto lido do arquivo; o resultado é gravado de volta. Devolve { ok, dados | motivo }.
+    atualizar(altera) {
+      const tarefa = filaGravacao.then(async () => {
+        if (!pastaHandle) return { ok: false, motivo: "nenhuma pasta conectada pelo botão de pasta (Chrome/Edge)" };
+        try {
+          if (!(await permissaoGravar())) return { ok: false, motivo: "sem permissão para gravar na pasta" };
+          const dados = await lerUnificado();
+          altera(dados);
+          const fh = await pastaHandle.getFileHandle(ARQ_AJUSTES, { create: true });
+          const w = await fh.createWritable();
+          await w.write(JSON.stringify(dados, null, 2));
+          await w.close();
+          try { ultimaModificacao = (await fh.getFile()).lastModified; } catch (e) {}
+          try { canalAjustes && canalAjustes.postMessage("mudou"); } catch (e) {}     // outras abas deste PC atualizam na hora
+          agendaCopia(120000);                     // a cópia do celular recebe os ajustes novos (2 min depois da última alteração)
+          return { ok: true, dados };
+        } catch (e) {
+          console.warn("Ajustes compartilhados: gravação falhou", e);
+          return { ok: false, motivo: String((e && e.message) || e) };
+        }
+      });
+      filaGravacao = tarefa.catch(() => {});
+      return tarefa;
+    },
+  };
+
+  window.justificativasCompartilhadas = {
+    disponivel: () => !!pastaHandle,
+    pasta: () => (pastaHandle ? pastaHandle.name : ""),
+    async ler() { const d = await window.arquivoCompartilhado.ler(); return d ? (d.justificativas || {}) : null; },
+    async gravar(chave, html) {
+      const atualizado = new Date().toISOString();
+      const r = await window.arquivoCompartilhado.atualizar((d) => { d.justificativas = d.justificativas || {}; d.justificativas[chave] = { html, atualizado }; });
+      return r.ok ? { ok: true, atualizado } : r;
+    },
+  };
+  // ===== Nuvem ao lado da versão: ✓ tudo salvo na pasta do SharePoint · ✕ alterações não salvas / sem pasta =====
+  // Clicar sincroniza: grava de novo tudo o que está na tela (justificativas, forecast, Situação, ajustes da etapa 2) e relê a pasta.
+  const SVG_NUVEM = (ok) => '<svg viewBox="0 0 26 18" aria-hidden="true"><path d="M7.2 16.2h12.3a4.4 4.4 0 0 0 .5-8.8 6 6 0 0 0-11.5-1.6A5.2 5.2 0 0 0 7.2 16.2z" '
+    + 'fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>'
+    + (ok ? '<path class="marca-ok" d="M9.8 10.9l2.3 2.3 4.4-4.6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>'
+          : '<path class="marca-erro" d="M10.6 8.6l4.8 4.8M15.4 8.6l-4.8 4.8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>')
+    + '</svg>';
+  const nuvem = $("nuvem");
+  let etapa2Pendente = null;                      // ajustes da etapa 2 que não chegaram à pasta (o clique na nuvem tenta de novo)
+  window.estadoNuvem = (ok, texto) => {
+    nuvem.innerHTML = SVG_NUVEM(ok);
+    nuvem.classList.toggle("nuvem-erro", !ok);
+    nuvem.title = texto + " — clique para sincronizar e salvar";
+    nuvem.setAttribute("aria-label", nuvem.title);
+  };
+  function nuvemInicial() {
+    if (!pastaHandle) window.estadoNuvem(false, "Sem pasta conectada: as alterações ficam só neste navegador");
+    else if (!etapa2Pendente) window.estadoNuvem(true, `Pasta "${pastaHandle.name}" conectada`);
+  }
+  window.avisoSite = (texto, erro) => {
+    let el = $("avisoSite");
+    if (!el) { el = document.createElement("div"); el.id = "avisoSite"; el.setAttribute("role", "status"); document.body.appendChild(el); }
+    el.textContent = texto; el.className = erro ? "erro" : ""; el.style.display = "block";
+    clearTimeout(window.avisoSite.t); window.avisoSite.t = setTimeout(() => { el.style.display = "none"; }, erro ? 9000 : 5000);
+  };
+  async function sincronizarNuvem() {
+    if (!pastaHandle) { window.avisoSite("Conecte a pasta do SharePoint (📁 Conectar pasta) para salvar na nuvem.", true); nuvemInicial(); return; }
+    nuvem.classList.add("girando");
+    try {
+      if (!(await permissaoGravar())) { window.estadoNuvem(false, "Sem permissão para gravar na pasta"); window.avisoSite("Sem permissão para gravar na pasta: permita a edição quando o navegador perguntar.", true); return; }
+      let ok = true;
+      if (etapa2Pendente) ok = (await guardaAjustes(etapa2Pendente.ref, etapa2Pendente.ajustes)).ok && ok;
+      const w = quadro().hidden ? null : janela();
+      if (w && w.sincronizarTudo) ok = (await w.sincronizarTudo()) && ok;
+      else ok = (await window.arquivoCompartilhado.atualizar(() => {})).ok && ok;
+      window.estadoNuvem(ok, ok ? `Tudo salvo na pasta "${pastaHandle.name}"` : "Há alterações que não foram salvas na pasta");
+      window.avisoSite(ok ? `Sincronizado: tudo salvo na pasta "${pastaHandle.name}"` : "Não foi possível salvar tudo na pasta do SharePoint", !ok);
+    } finally { nuvem.classList.remove("girando"); }
+  }
+  nuvem.addEventListener("click", sincronizarNuvem);
+  nuvemInicial();
+
+  // ===== Sincronização contínua entre as versões abertas (outros PCs pela pasta do OneDrive, outras abas na hora) =====
+  // A cada 2 s o site olha a data do ajustes_relatorio.json: se outra pessoa salvou (o OneDrive trouxe o arquivo novo),
+  // o relatório aberto relê a pasta e aplica. Ao voltar para a aba também confere na hora.
+  let ultimaModificacao = null, canalAjustes = null;
+  try { canalAjustes = new BroadcastChannel("faturamento_ajustes"); canalAjustes.onmessage = () => avisaRelatorio(); } catch (e) { /* sem BroadcastChannel */ }
+  function avisaRelatorio() {
+    try { const w = quadro().hidden ? null : janela(); if (w && w.puxarTudoDaPasta) w.puxarTudoDaPasta(); } catch (e) {}
+  }
+  async function verificaPasta() {
+    if (!pastaHandle) return;
+    try {
+      if ((await pastaHandle.queryPermission({ mode: "read" })) !== "granted") return;
+      const f = await (await pastaHandle.getFileHandle(ARQ_AJUSTES)).getFile();
+      if (ultimaModificacao !== null && f.lastModified !== ultimaModificacao) avisaRelatorio();
+      ultimaModificacao = f.lastModified;
+    } catch (e) { /* arquivo ainda não existe */ }
+  }
+  setInterval(verificaPasta, 2000);              // olhar a data do arquivo é leve: 2 s deixa a espera só por conta do OneDrive
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) { verificaPasta(); avisaRelatorio(); } });
+  window.addEventListener("focus", () => verificaPasta());
+
+  let urlsCriadas = [];
+
+  const ehEntrada = (nome) =>
+    EXTENSOES.some((ext) => nome.toLowerCase().endsWith(ext)) && !(nome in SAIDAS) && !nome.startsWith("~$");
+
+  const nomeMes = (ref) => {
+    if (!ref || !ref.includes("/")) return ref || "";
+    const [m, a] = ref.split("/");
+    return `${MESES[parseInt(m, 10) - 1]}/${a}`;
+  };
+
+  function pegaWorker() {
+    if (!worker) {
+      worker = new Worker("analisador.worker.js?v=" + VERSAO_SITE);
+      worker.onmessage = (e) => trataMensagem(e.data);
+      worker.onerror = (e) => {
+        worker = null;
+        mostraErro("Não foi possível carregar o Python no navegador. Verifique a internet e tente de novo.", e.message || "");
+      };
+    }
+    return worker;
+  }
+
+  // Etapas da geração: o item em andamento e os já concluídos (gráficos, tabelas, KPIs, abas)
+  let etapas = [];
+  function limpaEtapas() { etapas = []; $("listaEtapas").innerHTML = ""; $("listaEtapas").hidden = true; }
+  function registraEtapa(texto, concluir) {
+    if (!/^(Criando|Calculando|Montando)/.test(texto) && !concluir) return;
+    const ultima = etapas[etapas.length - 1];
+    if (ultima && !ultima.ok && ultima.texto !== texto) ultima.ok = true;
+    if (!concluir && (!ultima || ultima.texto !== texto)) etapas.push({ texto, ok: false });
+    if (concluir && ultima) ultima.ok = true;
+    const lista = $("listaEtapas");
+    lista.hidden = !etapas.length;
+    lista.innerHTML = etapas.slice(-8).map((e) =>
+      `<li class="${e.ok ? "ok" : "atual"}"><span>${e.ok ? "✓" : "●"}</span>${escapa(e.texto)}</li>`).join("");
+  }
+
+  // ===== Tempo estimado para terminar =====
+  // Fase 1: ler a pasta até a conferência do Top 20 (0–52%). Fase 2: gerar o relatório (52–100%).
+  // Usa o tempo da última execução neste navegador (quanto cada faixa da barra levou), ajustado ao ritmo de agora;
+  // na primeira vez, sem histórico, projeta pelo ritmo da própria barra. O valor conta os segundos entre as mensagens.
+  const ETA_LS = "faturamento_eta_v1";
+  let eta = { fase: null, t0: null, pontos: [], fim: null, timer: null };
+  const etaHistorico = () => { try { return JSON.parse(localStorage.getItem(ETA_LS) || "{}"); } catch (e) { return {}; } };
+  function iniciaEta(fase) {
+    paraEta();
+    eta = { fase, t0: null, pontos: [], fim: null, timer: setInterval(mostraEta, 1000) };
+  }
+  function paraEta() {
+    if (eta.timer) clearInterval(eta.timer);
+    eta.timer = null; eta.fim = null;
+    $("statusEta").hidden = true;
+  }
+  function salvaEta() {
+    if (eta.fase && eta.pontos.length > 2) {
+      const h = etaHistorico(); h[eta.fase] = eta.pontos.filter((_, i, a) => i % Math.ceil(a.length / 60) === 0 || i === a.length - 1);
+      try { localStorage.setItem(ETA_LS, JSON.stringify(h)); } catch (e) { /* sem armazenamento */ }
+    }
+    paraEta();
+  }
+  function tempoNoHistorico(pts, p) {           // segundos que a execução anterior levou até chegar em p%
+    if (!pts || pts.length < 2 || p < pts[0][0]) return null;
+    for (let i = 1; i < pts.length; i++) {
+      if (pts[i][0] >= p) {
+        const [p0, t0] = pts[i - 1], [p1, t1] = pts[i];
+        return p1 === p0 ? t1 : t0 + (t1 - t0) * (p - p0) / (p1 - p0);
+      }
+    }
+    return pts[pts.length - 1][1];
+  }
+  function atualizaEta(p) {
+    if (!eta.fase) return;
+    const agora = performance.now();
+    if (eta.t0 === null) eta.t0 = agora;
+    const decorrido = (agora - eta.t0) / 1000;
+    eta.pontos.push([p, Math.round(decorrido * 10) / 10]);
+    const [ini, fim] = eta.fase === "f1" ? [0, 52] : [52, 100];
+    let resta = null;
+    const h = etaHistorico()[eta.fase];
+    const tp = tempoNoHistorico(h, p);
+    if (h && tp !== null && tp > 2 && decorrido > 2) {
+      const total = h[h.length - 1][1], ritmo = Math.min(3, Math.max(0.33, decorrido / tp));
+      resta = Math.max(0, (total - tp) * ritmo);
+    } else {
+      const feito = (p - ini) / (fim - ini);
+      if (feito > 0.06 && decorrido > 3) resta = decorrido * (1 - feito) / feito;
+    }
+    if (resta === null) return;
+    const novoFim = agora + resta * 1000;
+    eta.fim = eta.fim === null ? novoFim : eta.fim * 0.6 + novoFim * 0.4;   // suaviza saltos entre mensagens
+    mostraEta();
+  }
+  function mostraEta() {
+    const el = $("statusEta");
+    if (!eta.fim) { el.hidden = true; return; }
+    const s = Math.max(0, Math.round((eta.fim - performance.now()) / 1000));
+    const alvo = eta.fase === "f1" ? " para a conferência" : " para o relatório";
+    if (s < 5) { el.textContent = "⏱ quase pronto"; el.hidden = false; return; }
+    const m = Math.floor(s / 60), r = Math.round((s % 60) / 5) * 5;
+    const txt = s < 60 ? `~${Math.ceil(s / 5) * 5} s` : r === 60 ? `~${m + 1} min` : `~${m} min ${String(r).padStart(2, "0")} s`;
+    el.textContent = `⏱ faltam ${txt}${alvo}`;
+    el.hidden = false;
+  }
+
+  function setStatus(texto, pct) {
+    registraEtapa(texto, texto === "Finalizado" || texto === "Relatório gerado");
+    $("statusTexto").textContent = texto;
+    if (typeof pct === "number") {
+      const p = Math.max(0, Math.min(100, pct));
+      $("barraFill").style.width = p + "%";
+      $("statusPct").textContent = Math.round(p) + "%";
+    }
+  }
+
+  function bloqueia(sim) {
+    rodando = sim;
+    btnPasta.disabled = sim;
+    btnAtualizar.disabled = sim;
+    btnEtapa2.disabled = sim;
+  }
+
+  // resumo da leitura: quantos arquivos foram lidos agora e quantos vieram de análises anteriores (guardados no navegador)
+  let ultimaLeitura = "";
+  function mostraLeitura(l) {
+    if (!l) return;
+    const partes = [`Lidos do arquivo agora: ${l.lidos || 0}`];
+    if (l.reaproveitados) partes.push(`reaproveitados (já lidos antes): ${l.reaproveitados}`);
+    if (l.guardadoMB != null) partes.push(`${String(l.guardadoMB).replace(".", ",")} MB guardados no navegador`);
+    const texto = partes.join(" · ");
+    ultimaLeitura = texto;
+    $("statusNota").textContent = texto;
+    $("notaLeitura").textContent = "♻️ " + texto + (l.reaproveitados ? " — só os arquivos novos ou alterados foram abertos." : "");
+    $("notaLeitura").hidden = false;
+    $("logExecucao").textContent += "\n" + texto;
+  }
+
+  function mostraErro(resumo, detalhe) {
+    fechaRelatorio();
+    progresso.hidden = false;
+    progresso.classList.add("erro");
+    setStatus("Não foi possível gerar o relatório");
+    $("statusNota").textContent = resumo;
+    if (detalhe) $("logExecucao").textContent += "\n" + detalhe;
+    progresso.querySelector("details").open = true;
+    bloqueia(false);
+  }
+
+  function trataMensagem(msg) {
+    if (msg.tipo === "etapa") setStatus(msg.texto);
+    else if (msg.tipo === "progresso") { setStatus(msg.texto, msg.pct); atualizaEta(msg.pct); }
+    else if (msg.tipo === "log") {
+      const log = $("logExecucao");
+      log.textContent += msg.linha + "\n";
+      log.scrollTop = log.scrollHeight;
+    }
+    else if (msg.tipo === "erro") { paraEta(); mostraErro(msg.resumo, msg.detalhe); }
+    else if (msg.tipo === "top20") { salvaEta(); mostraLeitura(msg.dados.leitura); decideEtapa2(msg.dados); }
+    else if (msg.tipo === "cacheLimpo") { $("statusNota").textContent = "Arquivos guardados apagados: a próxima análise lê todos os arquivos de novo."; }
+    else if (msg.tipo === "concluido") { salvaEta(); abreRelatorio(msg); }
+    else if (msg.tipo === "acompanhamento" || msg.tipo === "acompanhamentoErro") { if (esperaAcomp) { esperaAcomp(msg); esperaAcomp = null; } }
+  }
+
+  function abreRelatorio({ saidas, refAtual, refAnterior }) {
+    setStatus("Relatório gerado", 100);
+    progresso.hidden = true;                      // pronto: some a barra e as informações
+    $("fonteStatus").hidden = true;
+    bloqueia(false);
+
+    urlsCriadas.forEach(URL.revokeObjectURL);
+    urlsCriadas = [];
+    const downloads = $("downloads");
+    downloads.innerHTML = "";
+    let htmlRelatorio = null;
+
+    for (const nome of Object.keys(SAIDAS)) {
+      const saida = saidas.find((s) => s.nome === nome);
+      if (!saida) continue;
+      const info = SAIDAS[nome];
+      if (nome === "Relatorio_Comparativo.html") {
+        htmlRelatorio = new TextDecoder("utf-8").decode(saida.conteudo);
+      }
+      continue;                                    // o download do Top 100 agora fica dentro do relatório
+      const url = URL.createObjectURL(new Blob([saida.conteudo], { type: info.tipo }));
+      urlsCriadas.push(url);
+      const a = document.createElement("a");
+      a.className = "btn-top";
+      a.href = url;
+      a.download = nome;
+      a.textContent = info.rotulo;
+      downloads.appendChild(a);
+    }
+
+    if (!htmlRelatorio) {
+      mostraErro("A análise terminou, mas o relatório HTML não foi gerado.");
+      return;
+    }
+
+    const periodo = refAtual ? `${nomeMes(refAtual)} vs ${nomeMes(refAnterior)}` : "";
+    $("titulo").textContent = periodo ? `Faturamento — ${periodo}` : "Análise de Faturamento — Água e Esgoto";
+    document.title = periodo ? `Relatório ${periodo}` : "Relatório";
+    btnAtualizar.hidden = !pastaHandle;
+    btnEtapa2.hidden = !pastaHandle;
+    $("btnAbrirRel").hidden = !!pastaHandle;      // com a pasta conectada (computador) o "Abrir relatório" não é preciso
+
+    htmlAtual = htmlRelatorio;
+    if (pastaHandle) agendaCopia(3000);
+    $("btnAcomp").hidden = false;                 // a análise está carregada no Python: dá para gerar o Acompanhamento
+    // o cabeçalho do relatório repete o do site; aqui ele some (no arquivo/PDF continua)
+    $("quadroRelatorio").srcdoc = htmlRelatorio;
+    $("quadroRelatorio").hidden = false;
+    $("vazioWrap").hidden = true;
+    document.body.classList.add("relatorio-aberto");
+  }
+
+  function fechaRelatorio() {
+    $("etapaTop20").hidden = true;
+    $("quadroRelatorio").hidden = true;
+    $("barraDados").hidden = true;
+    $("btnPdf").hidden = true; $("menuPdf").hidden = true; $("btnOnePage").hidden = true; $("btnPrint").hidden = true; $("menuPrint").hidden = true;
+    $("vazioWrap").hidden = false;
+    document.body.classList.remove("relatorio-aberto", "top20-aberto");
+    document.title = "Análise de Faturamento — Água e Esgoto";
+  }
+
+  // Lê a pasta E as subpastas. O nome enviado leva o caminho ("Leste/Consumo.csv"): arquivos com o mesmo nome em
+  // pastas diferentes não se sobrescrevem. Pastas ocultas (".algo") ficam de fora.
+  const MAX_NIVEIS = 6;
+  async function lerPastaHandle(handle, prefixo = "", nivel = 0) {
+    const lidos = [];
+    for await (const entrada of handle.values()) {
+      if (entrada.name.startsWith(".")) continue;
+      if (entrada.kind === "file" && ehEntrada(entrada.name)) {
+        const arq = await entrada.getFile();
+        // o conteúdo só é lido no worker, e só para arquivos novos/alterados (os já lidos antes vêm do navegador)
+        lidos.push({ nome: prefixo + arq.name, arquivo: arq, tamanho: arq.size, modificado: arq.lastModified });
+      } else if (entrada.kind === "directory" && nivel < MAX_NIVEIS) {
+        lidos.push(...await lerPastaHandle(entrada, prefixo + entrada.name + "/", nivel + 1));
+      }
+    }
+    return lidos;
+  }
+
+  async function lerListaArquivos(lista) {
+    const lidos = [];
+    for (const arq of lista) {
+      const partes = (arq.webkitRelativePath || arq.name).split("/");
+      const relativo = partes.length > 1 ? partes.slice(1) : partes;          // tira o nome da pasta escolhida
+      if (relativo.length > MAX_NIVEIS + 1 || relativo.some((p) => p.startsWith("."))) continue;
+      if (!ehEntrada(arq.name)) continue;
+      lidos.push({ nome: relativo.join("/"), arquivo: arq, tamanho: arq.size, modificado: arq.lastModified });
+    }
+    return lidos;
+  }
+
+  function iniciaExecucao() {
+    fechaRelatorio();
+    $("fonteStatus").hidden = false;
+    progresso.hidden = false;
+    progresso.classList.remove("erro");
+    $("logExecucao").textContent = "";
+    $("listaArquivos").innerHTML = "";
+    limpaEtapas();
+    iniciaEta("f1");
+    $("statusNota").textContent = worker ? "Lendo os arquivos da pasta…" : "Carregando o Python no navegador. Na primeira vez pode levar cerca de 1 minuto.";
+    setStatus("Lendo a pasta…", 0);
+    bloqueia(true);
+    pegaWorker();                                  // já começa a carregar o Python
+  }
+
+  function enviaParaAnalise(arquivos, nomePasta) {
+    if (!arquivos.length) {
+      mostraErro(`Nenhum arquivo CSV, XLSX ou XLS encontrado na pasta "${nomePasta}".`);
+      return;
+    }
+    const lista = $("listaArquivos");
+    arquivos.forEach((a) => {
+      const tag = document.createElement("span");
+      tag.className = "arquivo";
+      tag.textContent = a.nome;
+      lista.appendChild(tag);
+    });
+    $("statusNota").textContent = `${arquivos.length} arquivo(s) encontrado(s) em "${nomePasta}".`;
+    pegaWorker().postMessage({ fase: "preparar", arquivos });
+  }
+
+  // Guarda a pasta conectada no navegador (IndexedDB) para reabri-la sozinho nas próximas visitas
+  const idb = {
+    open() { return new Promise((res, rej) => { const r = indexedDB.open("faturamento", 1); r.onupgradeneeded = () => r.result.createObjectStore("kv"); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); }); },
+    async get(k) { try { const db = await this.open(); return await new Promise((res) => { const q = db.transaction("kv").objectStore("kv").get(k); q.onsuccess = () => res(q.result); q.onerror = () => res(null); }); } catch (e) { return null; } },
+    async set(k, v) { try { const db = await this.open(); await new Promise((res) => { const t = db.transaction("kv", "readwrite"); t.objectStore("kv").put(v, k); t.oncomplete = res; t.onerror = res; }); } catch (e) {} },
+  };
+  const setFonte = (html) => { $("fonteStatus").innerHTML = html; };
+
+  async function analisaHandle(handle) {
+    iniciaExecucao();
+    try {
+      if ((await handle.queryPermission({ mode: "read" })) !== "granted" &&
+          (await handle.requestPermission({ mode: "read" })) !== "granted") {
+        mostraErro("O acesso à pasta não foi liberado.");
+        return;
+      }
+      enviaParaAnalise(await lerPastaHandle(handle), handle.name);
+    } catch (e) {
+      mostraErro("Não foi possível ler a pasta.", String(e));
+    }
+  }
+
+  async function escolhePasta() {
+    if (rodando) return;
+    if ("showDirectoryPicker" in window) {
+      try {
+        const handle = await window.showDirectoryPicker({ id: "faturamento", mode: "read" });
+        pastaHandle = handle;
+        nuvemInicial();
+        idb.set("pasta", handle);
+        setFonte(`Pasta conectada: <b>${handle.name}</b>`);
+        btnAtualizar.hidden = false;
+        btnEtapa2.hidden = false;
+        btnAtualizar.title = `Reler a pasta "${handle.name}"`;
+        analisaHandle(handle);
+      } catch (e) {
+        if (e.name !== "AbortError") mostraErro("Não foi possível abrir a pasta.", String(e));
+      }
+    } else {
+      inputPasta.value = "";
+      inputPasta.click();
+    }
+  }
+
+  function atualiza() {
+    if (!rodando && pastaHandle) analisaHandle(pastaHandle);
+  }
+
+
+  // ===== Etapa de conferência do Top 20 =====
+  let linhasTop20 = [];
+  const fmtNum = (v, dec) => v.toLocaleString("pt-BR", { minimumFractionDigits: dec, maximumFractionDigits: dec });
+
+  function lerNumero(texto) {
+    let t = String(texto).trim().replace(/\s/g, "").replace(/^R\$/i, "");
+    if (t === "") return NaN;
+    if (t.includes(",")) t = t.replace(/\./g, "").replace(",", ".");
+    else if (/^\d{1,3}(\.\d{3})+$/.test(t)) t = t.replace(/\./g, "");
+    return /^-?\d+(\.\d+)?$/.test(t) ? parseFloat(t) : NaN;
+  }
+
+  let gruposTop20 = [];
+  function mostraTop20({ refAtual, refAnterior, linhas, colunaSituacao, grupos, tarifa }) {
+    linhasTop20 = linhas;
+    tarifaTop20 = tarifa || null;
+    if ($("chkMinTodos")) $("chkMinTodos").checked = false;
+    gruposTop20 = grupos || [];
+    const mesAnt = refAnterior ? nomeMes(refAnterior) : "mês anterior";
+    $("thConsumoAnt").textContent = `Consumo ${mesAnt}`;
+    $("thValorAnt").textContent = `Valor ${mesAnt}`;
+    document.querySelectorAll(".tabela-grupos .th-delta").forEach((th) => { th.title = `Faturamento do mês contra ${mesAnt}`; });
+    const curto = (r) => { const [m, a] = String(r).split("/");            // "10/2026" → "Out/26"
+      return ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"][+m - 1] + "/" + String(a).slice(-2); };
+    document.querySelectorAll(".tabela-grupos .mes-at").forEach((th) => { if (refAtual) th.textContent = curto(refAtual); });
+    document.querySelectorAll(".tabela-grupos .mes-ant").forEach((th) => { if (refAnterior) th.textContent = curto(refAnterior); });
+    progresso.hidden = true;
+    $("top20TituloTexto").textContent = colunaSituacao
+      ? `Clientes em análise — ${nomeMes(refAtual)} (${linhas.length})`
+      : `Top 20 clientes com maior consumo — ${nomeMes(refAtual)}`;
+    $("avisoTop20").hidden = !!colunaSituacao;
+    $("textoFiltro").textContent = colunaSituacao ? "Aparecem todos os clientes com Situação Conta = EM ANALISE. " : "";
+    $("buscaTop20").value = "";
+    const sups = Array.from(new Set(linhas.map((l) => l.sup || "SEM SUP"))).sort((a, b) => (a === "SEM SUP") - (b === "SEM SUP") || a.localeCompare(b));
+    $("supTop20").innerHTML = `<option value="">Todas (${linhas.length})</option>` +
+      sups.map((s) => `<option value="${escapa(s)}">${escapa(s)} (${linhas.filter((l) => (l.sup || "SEM SUP") === s).length})</option>`).join("");
+    const corpo = $("corpoTop20");
+    corpo.innerHTML = "";
+    linhas.forEach((l, i) => {
+      const tr = document.createElement("tr");
+      const cel = (txt, cls) => { const td = document.createElement("td"); td.textContent = txt; if (cls) td.className = cls; return td; };
+      const celCliente = cel(l.cliente, "cli");
+      celCliente.title = l.cliente;                            // nome inteiro ao passar o mouse (a célula corta nomes longos)
+      tr.append(cel(i + 1), cel(l.ligacao), cel(l.grupo), cel(l.sup || "—"), celCliente, cel(l.categoria), cel(l.situacao || "—"),
+        cel(l.economias == null ? "—" : fmtNum(Math.abs(l.economias) < 0.5 ? 0 : l.economias, 0), "num"));
+      // mínimo da ligação pela estrutura tarifária + caixa para jogar o consumo para o mínimo
+      const tdMin = document.createElement("td"); tdMin.className = "num minimo";
+      const minimo = minimoLinha(l);
+      if (minimo != null) {
+        const chk = document.createElement("input");
+        chk.type = "checkbox"; chk.className = "chk-min"; chk.dataset.indice = i;
+        chk.setAttribute("aria-label", `Jogar a ligação ${l.ligacao} para o mínimo (${fmtNum(minimo, 0)} m³)`);
+        tdMin.append(document.createTextNode(fmtNum(minimo, 0) + " "), chk);
+      } else tdMin.textContent = "—";
+      tr.appendChild(tdMin);
+      const ant = { consumo: l.consumo_ant == null ? "—" : fmtNum(l.consumo_ant, 0), valor: l.valor_ant == null ? "—" : fmtNum(l.valor_ant, 2) };
+      [["consumo", 0], ["valor", 2]].forEach(([campo, dec]) => {
+        tr.appendChild(cel(ant[campo], "num ant"));                 // mês anterior, ao lado do campo editável
+        const td = document.createElement("td");
+        td.className = "num";
+        const inp = document.createElement("input");
+        inp.type = "text"; inp.inputMode = "decimal";
+        inp.value = fmtNum(l[campo], dec);
+        inp.dataset.indice = i; inp.dataset.campo = campo; inp.dataset.dec = dec;
+        inp.setAttribute("aria-label", `${campo === "consumo" ? "Consumo Faturado" : "Valor total"} da ligação ${l.ligacao}`);
+        inp.addEventListener("input", atualizaContador);
+        inp.addEventListener("blur", () => {
+          const n = lerNumero(inp.value);
+          if (!Number.isNaN(n)) inp.value = fmtNum(n, dec);
+          atualizaContador();
+        });
+        const orig = document.createElement("span");
+        orig.className = "orig"; orig.textContent = "original: " + fmtNum(l[campo], dec);
+        inp.title = orig.textContent;
+        td.append(inp, orig);
+        tr.appendChild(td);
+      });
+      tr.dataset.indice = i;
+      corpo.appendChild(tr);
+    });
+    ordenaTabela("valor", true);
+    atualizaContador();
+    $("etapaTop20").hidden = false;
+    document.body.classList.add("top20-aberto");
+    $("etapaTop20").scrollTop = 0;
+  }
+
+  // ===== Ajustes da etapa 2 guardados (pasta do SharePoint; sem pasta, só neste navegador) =====
+  // A etapa 2 só abre quando algum arquivo foi lido agora (novo ou alterado desde a última análise neste navegador) ou pelo
+  // botão "Etapa 2". Sem arquivo novo, a análise segue sozinha com os ajustes salvos — os mesmos para todos.
+  const LS_AJUSTES = "faturamento_ajustes_etapa2";
+  let forcarEtapa2 = false, refTop20 = "";
+  async function ajustesSalvos(ref) {
+    const comp = window.arquivoCompartilhado;
+    if (comp.disponivel()) {
+      const d = await comp.ler();
+      if (d) return { ajustes: (((d.etapa2 || {})[ref]) || {}).ajustes || [], fonte: "pasta", atualizado: ((d.etapa2 || {})[ref] || {}).atualizado };
+    }
+    try { return { ajustes: (JSON.parse(localStorage.getItem(LS_AJUSTES) || "{}")[ref] || []), fonte: "navegador" }; }
+    catch (e) { return { ajustes: [], fonte: "navegador" }; }
+  }
+  async function guardaAjustes(ref, ajustes) {
+    try { const t = JSON.parse(localStorage.getItem(LS_AJUSTES) || "{}"); t[ref] = ajustes; localStorage.setItem(LS_AJUSTES, JSON.stringify(t)); } catch (e) {}
+    const comp = window.arquivoCompartilhado;
+    const r = comp.disponivel()
+      ? await comp.atualizar((d) => { d.etapa2 = d.etapa2 || {}; d.etapa2[ref] = { ajustes, atualizado: new Date().toISOString() }; })
+      : { ok: false, motivo: "sem pasta conectada: salvos só neste navegador" };
+    etapa2Pendente = r.ok ? null : { ref, ajustes };
+    window.estadoNuvem(r.ok, r.ok ? "Ajustes da etapa 2 salvos na pasta" : `Ajustes da etapa 2 não salvos na pasta (${r.motivo})`);
+    window.avisoSite(r.ok ? "Ajustes da etapa 2 salvos na pasta do SharePoint — valem para todos" : `Ajustes da etapa 2 salvos só neste navegador (${r.motivo})`, !r.ok);
+    return r;
+  }
+  const quando = (iso) => { try { return new Date(iso).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" }); } catch (e) { return ""; } };
+
+  async function decideEtapa2(dados) {
+    refTop20 = dados.refAtual || "";
+    const salvos = await ajustesSalvos(refTop20);
+    const presentes = new Set(dados.linhas.map((l) => String(l.ligacao)));
+    const validos = salvos.ajustes.filter((a) => presentes.has(String(a.ligacao)));
+    const novos = !dados.leitura || (dados.leitura.lidos || 0) > 0;
+    if (!novos && !forcarEtapa2) {
+      continuaAnalise(validos, `Nenhum arquivo novo ou alterado: etapa 2 pulada${validos.length ? `, com ${validos.length} ajuste(s) salvos (${salvos.fonte})` : ""}. Para conferir os clientes, use "✎ Etapa 2".`);
+      return;
+    }
+    forcarEtapa2 = false;
+    mostraTop20(dados);
+    let aplicados = 0;
+    validos.forEach((a) => {
+      const i = linhasTop20.findIndex((l) => String(l.ligacao) === String(a.ligacao));
+      if (i < 0) return;
+      ["consumo", "valor"].forEach((campo) => {
+        if (a[campo] == null) return;
+        const inp = document.querySelector(`#corpoTop20 input[data-indice="${i}"][data-campo="${campo}"]`);
+        if (inp) { inp.value = fmtNum(a[campo], +inp.dataset.dec); aplicados++; }
+      });
+    });
+    atualizaContador();
+    const nota = $("notaAjustes");
+    nota.hidden = !validos.length;
+    nota.textContent = validos.length ? `${validos.length} cliente(s) já vieram com os ajustes salvos ${salvos.fonte === "pasta" ? "na pasta do SharePoint" : "neste navegador"}`
+      + (salvos.atualizado ? ` (atualizados em ${quando(salvos.atualizado)})` : "") + ". Confira e aplique." : "";
+  }
+
+  // ===== Estrutura tarifária na conferência: mínimo da ligação e valor recalculado quando o consumo muda =====
+  let tarifaTop20 = null;
+  const ecoLinha = (l) => ({ res: l.eco_res || 0, com: l.eco_com || 0, ind: l.eco_ind || 0, pub: l.eco_pub || 0 });
+  const temEco = (l) => (l.eco_res || 0) + (l.eco_com || 0) + (l.eco_ind || 0) + (l.eco_pub || 0) > 0;
+  function minimoLinha(l) {
+    if (!tarifaTop20 || !window.Tarifa || !temEco(l)) return null;
+    const m = Tarifa.minimo(tarifaTop20, l.categoria, ecoLinha(l));
+    return m > 0 ? m : null;
+  }
+  function valorPelaTarifa(l, consumo) {
+    if (!tarifaTop20 || !window.Tarifa || !temEco(l)) return null;
+    return Tarifa.valor(tarifaTop20, consumo, l.categoria, ecoLinha(l), !!l.esgoto);
+  }
+  function recalculaValor(i, consumo) {         // consumo digitado/mínimo → valor pela estrutura tarifária
+    const l = linhasTop20[i], v = valorPelaTarifa(l, consumo);
+    if (v == null) return;
+    const inpV = document.querySelector(`#corpoTop20 input[data-indice="${i}"][data-campo="valor"]`);
+    if (inpV) { inpV.value = fmtNum(v, 2); inpV.title = `calculado pela estrutura tarifária (${fmtNum(consumo, 0)} m³) — original: ${fmtNum(l.valor, 2)}`; }
+  }
+  document.addEventListener("change", (e) => {
+    const chk = e.target.closest && e.target.closest("#corpoTop20 .chk-min");
+    if (chk) {
+      const i = +chk.dataset.indice, l = linhasTop20[i];
+      const inpC = document.querySelector(`#corpoTop20 input[data-indice="${i}"][data-campo="consumo"]`);
+      const inpV = document.querySelector(`#corpoTop20 input[data-indice="${i}"][data-campo="valor"]`);
+      if (chk.checked) { const m = minimoLinha(l); inpC.value = fmtNum(m, 0); recalculaValor(i, m); }
+      else { inpC.value = fmtNum(l.consumo, 0); inpV.value = fmtNum(l.valor, 2); inpV.title = "original: " + fmtNum(l.valor, 2); }
+      atualizaContador(); return;
+    }
+    if (e.target.id === "chkMinTodos") {
+      document.querySelectorAll("#corpoTop20 tr:not([hidden]) .chk-min").forEach((c) => {
+        if (c.checked !== e.target.checked) { c.checked = e.target.checked; c.dispatchEvent(new Event("change", { bubbles: true })); }
+      });
+    }
+  });
+  document.addEventListener("input", (e) => {    // consumo digitado à mão: o valor acompanha pela tarifa
+    const inp = e.target.closest && e.target.closest('#corpoTop20 input[data-campo="consumo"]');
+    if (!inp) return;
+    const n = lerNumero(inp.value);
+    if (!Number.isNaN(n) && n >= 0) recalculaValor(+inp.dataset.indice, n);
+    const chk = inp.closest("tr").querySelector(".chk-min");
+    if (chk && chk.checked && Math.abs(n - minimoLinha(linhasTop20[+inp.dataset.indice])) > 1e-9) chk.checked = false;
+  });
+
+  // Lê a tabela; devolve { ajustes, invalido }
+  // alterado = diferente do original COMO ELE APARECE no campo (54,7 m³ aparece 55: deixar 55 não é alteração)
+  const alterou = (n, original, dec) => Math.abs(n - Number(original.toFixed(dec))) > (dec ? 0.004 : 1e-9);
+
+  function leAjustes() {
+    const mapa = new Map();
+    let invalido = false;
+    document.querySelectorAll("#corpoTop20 input[data-campo]").forEach((inp) => {
+      const l = linhasTop20[+inp.dataset.indice], campo = inp.dataset.campo;
+      const n = lerNumero(inp.value);
+      inp.classList.remove("alterado", "invalido");
+      if (Number.isNaN(n) || n < 0) { inp.classList.add("invalido"); invalido = true; return; }
+      if (alterou(n, l[campo], +inp.dataset.dec)) {
+        inp.classList.add("alterado");
+        const aj = mapa.get(l.ligacao) || { ligacao: l.ligacao, consumo: null, valor: null };
+        aj[campo] = n;
+        mapa.set(l.ligacao, aj);
+      }
+    });
+    return { ajustes: Array.from(mapa.values()), invalido };
+  }
+
+
+  // Ordena as linhas (padrão: Valor total, maior para menor). Clicar de novo no mesmo título inverte.
+  let ordemAtual = { campo: "valor", desc: true };
+  function ordenaTabela(campo, forcaDesc) {
+    const desc = forcaDesc ? true : (ordemAtual.campo === campo ? !ordemAtual.desc : true);
+    ordemAtual = { campo, desc };
+    const corpo = $("corpoTop20");
+    const valorLinha = (tr) => {
+      const inp = tr.querySelector(`input[data-campo="${campo}"]`);
+      const n = lerNumero(inp.value);
+      return Number.isNaN(n) ? linhasTop20[+tr.dataset.indice][campo] : n;
+    };
+    const trs = Array.from(corpo.children).sort((a, b) =>
+      (desc ? valorLinha(b) - valorLinha(a) : valorLinha(a) - valorLinha(b)) || (+a.dataset.indice - +b.dataset.indice));
+    trs.forEach((tr, pos) => { tr.firstChild.textContent = pos + 1; corpo.appendChild(tr); });
+    document.querySelectorAll(".tabela-top20 th.ordenavel").forEach((th) => {
+      th.querySelector(".seta").textContent = th.dataset.ordem === campo ? (desc ? "▼" : "▲") : "";
+    });
+  }
+  document.querySelectorAll(".tabela-top20 th.ordenavel").forEach((th) => {
+    th.addEventListener("click", () => ordenaTabela(th.dataset.ordem));
+    th.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); ordenaTabela(th.dataset.ordem); } });
+  });
+
+  // filtros da conferência: texto (ligação, cliente, grupo) e superintendência — valem juntos
+  function filtraTop20() {
+    const termo = $("buscaTop20").value.trim().toLowerCase(), sup = $("supTop20").value;
+    document.querySelectorAll("#corpoTop20 tr").forEach((tr) => {
+      const l = linhasTop20[+tr.dataset.indice];
+      tr.hidden = (!!termo && !(`${l.ligacao} ${l.cliente} ${l.grupo}`.toLowerCase().includes(termo)))
+        || (!!sup && (l.sup || "SEM SUP") !== sup);
+    });
+  }
+  $("buscaTop20").addEventListener("input", filtraTop20);
+  $("supTop20").addEventListener("change", () => { filtraTop20(); atualizaGrupos(); });
+
+  // Quadro ao lado: totais de cada grupo de leitura + a diferença das alterações feitas na tabela (respeita a SUP escolhida)
+  // Quadros ao lado: (1) totais de cada grupo de leitura + a diferença das alterações feitas na tabela;
+  // (2) só os clientes em análise (as linhas da tabela), por grupo. Os dois seguem a SUP escolhida.
+  function atualizaGrupos() {
+    const sup = $("supTop20").value;
+    const delta = new Map(), analise = new Map();                  // grupo -> [Δ consumo, Δ valor] / somas dos clientes
+    document.querySelectorAll("#corpoTop20 tr").forEach((tr) => {
+      const l = linhasTop20[+tr.dataset.indice];
+      const a = analise.get(l.grupo) || { grupo: l.grupo, n: 0, consumo: 0, consumo_ant: 0, valor: 0, valor_ant: 0, alterado: false, oc: 0, ov: 0 };
+      a.n++; a.consumo_ant += l.consumo_ant || 0; a.valor_ant += l.valor_ant || 0; a.oc += l.consumo; a.ov += l.valor;
+      a.sup = l.sup || "SEM SUP";
+      tr.querySelectorAll("input").forEach((inp) => {
+        const campo = inp.dataset.campo, n = lerNumero(inp.value);
+        const ok = !Number.isNaN(n) && n >= 0, mudou = ok && alterou(n, l[campo], +inp.dataset.dec);
+        a[campo] += mudou ? n : l[campo];
+        if (mudou) {
+          a.alterado = true;
+          const d = delta.get(l.grupo) || [0, 0];
+          d[campo === "consumo" ? 0 : 1] += n - l[campo];
+          delta.set(l.grupo, d);
+        }
+      });
+      analise.set(l.grupo, a);
+    });
+    const todos = gruposTop20.filter((g) => !sup || (g.sup || "SEM SUP") === sup).map((g) => {
+      const d = delta.get(g.grupo) || [0, 0];
+      return { grupo: g.grupo, consumo: g.consumo + d[0], consumo_ant: g.consumo_ant, valor: g.valor + d[1], valor_ant: g.valor_ant,
+               alterado: Math.abs(d[0]) > 1e-9 || Math.abs(d[1]) > 0.004, oc: g.consumo, ov: g.valor };
+    });
+    desenhaQuadroGrupos($("corpoGrupos"), $("totalGrupos"), todos, false);
+    const ordem = new Map(gruposTop20.map((g, i) => [g.grupo, i]));
+    const soAnalise = Array.from(analise.values()).filter((a) => !sup || a.sup === sup)
+      .sort((x, y) => (ordem.has(x.grupo) ? ordem.get(x.grupo) : 1e9) - (ordem.has(y.grupo) ? ordem.get(y.grupo) : 1e9) || String(x.grupo).localeCompare(y.grupo));
+    desenhaQuadroGrupos($("corpoGruposAnalise"), $("totalGruposAnalise"), soAnalise, true);
+    $("notaGrupos").hidden = false;
+  }
+
+  function desenhaQuadroGrupos(corpo, rodape, linhas, comClientes) {
+    const pct = (a, b) => (b ? (a / b - 1) * 100 : null);
+    const celula = (t, c) => { const td = document.createElement("td"); td.textContent = t; if (c) td.className = c; return td; };
+    const celDelta = (p) => celula(p == null ? "—" : (p > 0 ? "+" : "") + fmtNum(p, 1) + "%", "num" + (p != null && p < 0 ? " neg" : ""));
+    const tot = { n: 0, consumo: 0, valor: 0, consumo_ant: 0, valor_ant: 0 };
+    corpo.innerHTML = "";
+    linhas.forEach((g) => {
+      ["n", "consumo", "valor", "consumo_ant", "valor_ant"].forEach((k) => { tot[k] += g[k] || 0; });
+      const tr = document.createElement("tr");
+      if (g.alterado) { tr.className = "alterado"; tr.title = `Original: ${fmtNum(g.oc, 0)} m³ · R$ ${fmtNum(g.ov, 2)}`; }
+      tr.appendChild(celula(g.grupo, ""));
+      if (comClientes) tr.appendChild(celula(fmtNum(g.n, 0), "num"));
+      [[fmtNum(g.consumo, 0), "num"], [fmtNum(g.consumo_ant, 0), "num ant"], [fmtNum(g.valor, 2), "num"], [fmtNum(g.valor_ant, 2), "num ant"]]
+        .forEach(([t, c]) => tr.appendChild(celula(t, c)));
+      tr.appendChild(celDelta(pct(g.valor, g.valor_ant)));
+      corpo.appendChild(tr);
+    });
+    rodape.innerHTML = "";
+    const tr = document.createElement("tr");
+    tr.appendChild(celula("Total", ""));
+    if (comClientes) tr.appendChild(celula(fmtNum(tot.n, 0), "num"));
+    [fmtNum(tot.consumo, 0), fmtNum(tot.consumo_ant, 0), fmtNum(tot.valor, 2), fmtNum(tot.valor_ant, 2)].forEach((t) => tr.appendChild(celula(t, "num")));
+    tr.appendChild(celDelta(pct(tot.valor, tot.valor_ant)));
+    rodape.appendChild(tr);
+  }
+
+  function atualizaContador() {
+    atualizaGrupos();
+    const { ajustes, invalido } = leAjustes();
+    $("contadorTop20").innerHTML = invalido
+      ? "Há valores inválidos (use apenas números)."
+      : ajustes.length ? `<b>${ajustes.length}</b> cliente(s) alterado(s)` : "Nenhuma alteração";
+    $("btnAplicar").disabled = invalido;
+  }
+
+  function continuaAnalise(ajustes, aviso) {
+    $("etapaTop20").hidden = true;
+    progresso.hidden = false;
+    progresso.classList.remove("erro");
+    $("statusNota").textContent = (aviso ? aviso + " " : "")
+      + (ajustes.length ? `Usando ${ajustes.length} cliente(s) com valores alterados.` : "Usando os valores originais.")
+      + (ultimaLeitura ? " " + ultimaLeitura + "." : "");
+    limpaEtapas();
+    iniciaEta("f2");
+    setStatus("Processando…", 52);
+    bloqueia(true);
+    pegaWorker().postMessage({ fase: "continuar", ajustes });
+  }
+
+  $("btnAplicar").addEventListener("click", async () => {
+    const { ajustes, invalido } = leAjustes();
+    if (invalido) return;
+    const r = await guardaAjustes(refTop20, ajustes);          // salvos para todos antes de seguir (o clique dá a permissão de gravar)
+    continuaAnalise(ajustes, r.ok ? "Ajustes salvos na pasta do SharePoint." : `Ajustes salvos só neste navegador (${r.motivo}).`);
+  });
+  $("btnPular").addEventListener("click", () => continuaAnalise([]));
+  $("btnRestaurar").addEventListener("click", () => {
+    document.querySelectorAll("#corpoTop20 input[data-campo]").forEach((inp) => {
+      const l = linhasTop20[+inp.dataset.indice];
+      inp.value = fmtNum(l[inp.dataset.campo], +inp.dataset.dec);
+    });
+    document.querySelectorAll("#corpoTop20 .chk-min, #chkMinTodos").forEach((c) => { c.checked = false; });
+    atualizaContador();
+  });
+
+
+  // ===== Navegação e filtros (listas suspensas, presentes em todas as abas) =====
+  const filtrosEstado = { view: "resumo", sup: "TODAS", mes: null, ref: "" };
+  let infoFiltros = null;
+  const quadro = () => $("quadroRelatorio");
+  const janela = () => quadro().contentWindow;
+  const escapa = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const TITULOS_VAZIO = {
+    garantia: ["Garantia", "Top 1000 por média do faturado, análise de garantia matrícula a matrícula e resumo de ganhos"],
+    plano: ["Plano de ação", "Plano de ação colado da planilha, salvo na pasta para todos e incluído no PDF executivo"],
+    onepage: ["One page", "Acompanhamento do faturamento numa folha vertical (lê bem no celular), baixado em PDF de uma página"],
+    dre: ["DRE: orçado × realizado", "Realizado do mês contra o orçado RF e o orçado SUP, por superintendência"],
+    indiretas: ["Indiretas", "Orçado × realizado por classe, evolução mensal e ticket médio do serviço avulso"],
+    resumo: ["Resumo", "KPIs, gráfico de faturamento por grupo e destaques do mês"],
+    tabelas: ["Diretas", "Tabelas de água e esgoto por grupo, orçado por ciclo, consumo mínimo e Top 100"],
+    dados: ["Dados", "Bases carregadas, avisos e explicação de como cada cálculo é feito (inclusive o forecast)"],
+    forecast: ["Forecast", "Previsão de fechamento do mês, editável: ao mudar um valor, os totais e comparações se refazem"],
+  };
+  // quais filtros valem em cada aba (os demais ficam esmaecidos)
+  const APLICA = { dre: ["Sup", "Ref", "Mes"], indiretas: ["Sup", "Mes"], resumo: ["Sup", "Grupo"], tabelas: ["Sup", "Grupo"], analise: ["Sup", "Grupo"], dados: [], forecast: ["Sup", "Ref"], garantia: ["Sup", "Grupo"], plano: ["Sup", "Grupo"], onepage: ["Sup", "Ref", "Mes", "Grupo"] };
+
+  function aplicaFiltros() {
+    document.querySelectorAll("#nav .tab").forEach((t) => t.classList.toggle("active", t.dataset.view === filtrosEstado.view));
+    $("barraDados").hidden = filtrosEstado.view !== "dados" || quadro().hidden;   // botões de arquivos: só na aba Dados
+    ["Sup", "Ref", "Mes", "Grupo"].forEach((f) => {
+      const ok = APLICA[filtrosEstado.view].includes(f);
+      $("fg" + f).classList.toggle("inativo", !ok);
+      $("fg" + f).title = ok ? "" : "Este filtro não se aplica a esta aba";
+    });
+    const w = quadro().hidden ? null : janela();
+    if (!w || !w.mostrarView) {
+      $("vazioTitulo").textContent = TITULOS_VAZIO[filtrosEstado.view][0];
+      $("vazioDica").textContent = TITULOS_VAZIO[filtrosEstado.view][1];
+      return;
+    }
+    w.mostrarView(filtrosEstado.view);
+    w.definirFiltros({ sup: filtrosEstado.sup, mes: filtrosEstado.mes, ref: filtrosEstado.ref });
+  }
+
+  function montaFiltros() {
+    const doc = quadro().contentDocument;
+    const el = doc && doc.getElementById("info-filtros");
+    try { infoFiltros = el ? JSON.parse(el.textContent) : null; } catch (e) { infoFiltros = null; }
+    // esconde, dentro do relatório, os controles que ficam no cabeçalho do site
+    const estilo = doc.createElement("style");
+    estilo.textContent = ".header-exec, .toolbar { display: none !important; } #view-resumo, #view-tabelas, #view-analise, #view-dre, #view-indiretas, #view-garantia, #view-plano, #view-onepage, #view-dados { padding-top: 16px; }";
+    doc.head.appendChild(estilo);
+    filtrosEstado.sup = "TODAS"; filtrosEstado.ref = infoFiltros.refPadrao || "";
+    filtrosEstado.mes = infoFiltros ? infoFiltros.mesAtual : null;
+    const opcoes = (sel, itens, atual) => { sel.innerHTML = itens.map(([v, t]) => `<option value="${escapa(v)}" ${v === atual ? "selected" : ""}>${escapa(t)}</option>`).join(""); sel.disabled = false; };
+    opcoes($("selSupTop"), infoFiltros.sups.map((s) => [s, s === "TODAS" ? "Todas" : s]), "TODAS");
+    const fontes = infoFiltros.fontes || [];
+    const [r1, r2] = (infoFiltros.refPadrao || "").split("|");
+    const itensRef = [["", "—"]].concat(fontes.map((f) => [f, f]));
+    opcoes($("selRef1Top"), fontes.length ? itensRef : [["", "Sem orçado"]], r1 || "");
+    opcoes($("selRef2Top"), fontes.length ? itensRef : [["", "—"]], r2 || "");
+    opcoes($("selMesTop"), infoFiltros.meses.map((m) => [m.ref, m.label]), filtrosEstado.mes);
+    const grupos = Array.from(doc.querySelectorAll(".chk-grupo"));
+    $("listaGrupos").innerHTML = `<label><input type="checkbox" id="chkTodosGrupos" checked> <b>Selecionar todos</b></label><hr>` +
+      grupos.map((g) => `<label><input type="checkbox" class="chk-grupo-top" value="${escapa(g.value)}" checked> ${escapa(g.value)}</label>`).join("");
+    $("btnGrupo").textContent = "Todos ▾"; $("btnGrupo").disabled = false;
+    $("btnPdf").hidden = false; $("btnOnePage").hidden = false; $("btnPrint").hidden = false;
+    filtrosEstado.view = "resumo";
+    // filtros de cada pessoa (neste navegador): a última escolha volta ao abrir; sem escolha salva, SUP Interior,
+    // Comparar padrão, mês vigente e grupos Liberados/Em Análise. Mês e grupos só voltam se o mês vigente for o mesmo.
+    const salvo = lerFiltrosSalvos(), tem = (sel, v) => !!v && Array.from($(sel).options).some((o) => o.value === v);
+    const supIni = tem("selSupTop", salvo.sup) ? salvo.sup : (tem("selSupTop", "INTERIOR") ? "INTERIOR" : "TODAS");
+    filtrosEstado.sup = supIni; $("selSupTop").value = supIni;
+    if (salvo.ref !== undefined) {
+      const [s1, s2] = String(salvo.ref || "").split("|");
+      if ((!s1 || tem("selRef1Top", s1)) && (!s2 || tem("selRef2Top", s2))) { $("selRef1Top").value = s1 || ""; $("selRef2Top").value = s2 || ""; filtrosEstado.ref = salvo.ref || ""; }
+    }
+    const mesmoMes = infoFiltros && salvo.mesAtual === infoFiltros.mesAtual;
+    if (mesmoMes && tem("selMesTop", salvo.mes)) { filtrosEstado.mes = salvo.mes; $("selMesTop").value = salvo.mes; }
+    aplicaFiltros();
+    try {
+      const w = janela();
+      if (mesmoMes && Array.isArray(salvo.grupos)) {                    // grupos escolhidos pela pessoa neste mês
+        const marc = new Set(salvo.grupos);
+        w.document.querySelectorAll(".chk-grupo").forEach((c) => { const l = c.closest("label"); if (!l || l.style.display !== "none") c.checked = marc.has(c.value); });
+        w.gruposAuto = false; if (w.filtrarPorGrupo) w.filtrarPorGrupo();
+      } else if (w.aplicarGruposPadrao) w.aplicarGruposPadrao();       // grupos Liberados e Em Análise
+    } catch (e) {}
+    sincronizaGrupos();
+    avisaRelatorio();                 // aplica as configurações salvas no JSON (ex.: "Comparar") por cima das padrões
+  }
+
+  // ===== Filtros de cada pessoa: guardados só neste navegador (não mudam a tela de mais ninguém) =====
+  const FILTROS_LS = "faturamento_filtros_pessoais";
+  function lerFiltrosSalvos() { try { return JSON.parse(localStorage.getItem(FILTROS_LS) || "{}") || {}; } catch (e) { return {}; } }
+  function salvaFiltros(extra) {
+    const atual = Object.assign(lerFiltrosSalvos(), { sup: filtrosEstado.sup, ref: filtrosEstado.ref, mes: filtrosEstado.mes,
+      mesAtual: infoFiltros ? infoFiltros.mesAtual : null }, extra || {});
+    try { localStorage.setItem(FILTROS_LS, JSON.stringify(atual)); } catch (e) { /* sem armazenamento */ }
+  }
+  function aplicaGrupos() {
+    const w = janela(), todos = Array.from(document.querySelectorAll(".chk-grupo-top"));
+    w.gruposAuto = false;                         // a pessoa escolheu os grupos: não volta mais ao padrão
+    salvaFiltros({ grupos: todos.filter((c) => c.checked).map((c) => c.value) });
+    const marcados = new Set(todos.filter((c) => c.checked).map((c) => c.value));
+    w.document.querySelectorAll(".chk-grupo").forEach((c) => { c.checked = marcados.has(c.value); });
+    if (w.filtrarPorGrupo) w.filtrarPorGrupo();
+    $("btnGrupo").textContent = (marcados.size === todos.length ? "Todos" : `${marcados.size} de ${todos.length}`) + " ▾";
+    $("chkTodosGrupos").checked = marcados.size === todos.length;
+  }
+
+  $("nav").addEventListener("click", (e) => {
+    const t = e.target.closest(".tab"); if (!t) return;
+    filtrosEstado.view = t.dataset.view; aplicaFiltros();
+  });
+  // a lista de grupos do topo mostra só os grupos da superintendência escolhida (o relatório já marcou quais são)
+  function sincronizaGrupos() {
+    const doc = quadro().contentDocument; if (!doc) return;
+    const caixas = Array.from(doc.querySelectorAll(".chk-grupo")).filter((c) => { const l = c.closest("label"); return !l || l.style.display !== "none"; });
+    $("listaGrupos").innerHTML = `<label><input type="checkbox" id="chkTodosGrupos" ${caixas.every((c) => c.checked) ? "checked" : ""}> <b>Selecionar todos</b></label><hr>` +
+      caixas.map((g) => `<label><input type="checkbox" class="chk-grupo-top" value="${escapa(g.value)}" ${g.checked ? "checked" : ""}> ${escapa(g.value)}</label>`).join("");
+    const marcados = caixas.filter((c) => c.checked).length;
+    $("btnGrupo").textContent = (marcados === caixas.length ? "Todos" : `${marcados} de ${caixas.length}`) + " ▾";
+  }
+  $("selSupTop").addEventListener("change", (e) => {
+    filtrosEstado.sup = e.target.value; aplicaFiltros(); sincronizaGrupos();
+    salvaFiltros({ grupos: null });               // outra SUP: os grupos voltam ao padrão dela
+  });
+  window.sincronizaGruposTopo = () => sincronizaGrupos();
+  const mudouRef = () => {
+    const escolhidas = [$("selRef1Top").value, $("selRef2Top").value].filter((v, i, a) => v && a.indexOf(v) === i);
+    filtrosEstado.ref = escolhidas.join("|"); aplicaFiltros(); salvaFiltros();
+  };
+
+  $("selRef1Top").addEventListener("change", mudouRef);
+  $("selRef2Top").addEventListener("change", mudouRef);
+  $("selMesTop").addEventListener("change", (e) => { filtrosEstado.mes = e.target.value; aplicaFiltros(); salvaFiltros(); });
+  $("btnGrupo").addEventListener("click", (e) => { e.stopPropagation(); $("ddGrupo").classList.toggle("aberto"); });
+  document.addEventListener("click", (e) => { if (!e.target.closest("#ddGrupo")) $("ddGrupo").classList.remove("aberto"); });
+  $("listaGrupos").addEventListener("change", (e) => {
+    if (e.target.id === "chkTodosGrupos") document.querySelectorAll(".chk-grupo-top").forEach((c) => { c.checked = e.target.checked; });
+    aplicaGrupos();
+  });
+  // PDF executivo: o arquivo .pdf é gerado direto (jsPDF + html2canvas, da pasta lib/ do site) — sem a janela de impressão
+  // o código das bibliotecas é passado como texto: o relatório o coloca no documento do PDF (é lá que elas desenham)
+  let codigoLibsPdf = null;
+  async function libsPdf() {
+    if (!codigoLibsPdf) {
+      codigoLibsPdf = Promise.all(["lib/jspdf.umd.min.js", "lib/html2canvas.min.js"].map(async (u) => {
+        const r = await fetch(u); if (!r.ok) throw new Error(`não carregou ${u} (HTTP ${r.status})`); return r.text();
+      }));
+    }
+    try { return { codigo: await codigoLibsPdf }; } catch (e) { codigoLibsPdf = null; console.warn(e); return null; }
+  }
+  window.libsPdfSite = libsPdf;                                    // o PDF da aba One page usa as mesmas bibliotecas
+  // Executivo: o botão abre a escolha entre a versão para ler no celular (padrão) e a A4 para imprimir
+  const menuPdf = $("menuPdf");
+  const fechaMenuPdf = () => { menuPdf.hidden = true; $("btnPdf").setAttribute("aria-expanded", "false"); };
+  $("btnPdf").addEventListener("click", (e) => {
+    e.stopPropagation();
+    menuPdf.hidden = !menuPdf.hidden; $("btnPdf").setAttribute("aria-expanded", String(!menuPdf.hidden));
+  });
+  document.addEventListener("click", (e) => { if (!menuPdf.hidden && !e.target.closest("#menuPdfWrap")) fechaMenuPdf(); });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !menuPdf.hidden) fechaMenuPdf(); });
+  menuPdf.querySelectorAll("button[data-modo]").forEach((b) => b.addEventListener("click", async () => {
+    fechaMenuPdf();
+    const w = janela(); w.focus();
+    if (!w.gerarExecutivo) { w.print(); return; }                 // relatório antigo (sem executivo): imprime a tela
+    w.gerarExecutivo(await libsPdf(), b.dataset.modo);            // sem as bibliotecas, o relatório tenta o CDN e depois a impressão
+  }));
+  // Prints da apresentação: o relatório gera o PNG (e baixa); aqui ele também vai para a área de transferência (Ctrl+V no slide).
+  // O ClipboardItem recebe a promessa na hora do clique: a cópia continua valendo depois do tempo de gerar a imagem.
+  const menuPrint = $("menuPrint");
+  const fechaMenuPrint = () => { menuPrint.hidden = true; $("btnPrint").setAttribute("aria-expanded", "false"); };
+  $("btnPrint").addEventListener("click", (e) => {
+    e.stopPropagation();
+    menuPrint.hidden = !menuPrint.hidden; $("btnPrint").setAttribute("aria-expanded", String(!menuPrint.hidden));
+  });
+  document.addEventListener("click", (e) => { if (!menuPrint.hidden && !e.target.closest("#menuPrintWrap")) fechaMenuPrint(); });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !menuPrint.hidden) fechaMenuPrint(); });
+  menuPrint.querySelectorAll("button[data-print]").forEach((b) => b.addEventListener("click", () => {
+    fechaMenuPrint();
+    const w = janela();
+    if (!w.gerarPrint) { alert("Este relatório foi gerado por uma versão anterior do painel: atualize a análise para ter os prints."); return; }
+    const imagem = libsPdf().then((l) => w.gerarPrint(b.dataset.print, l));
+    let copia = null;
+    try { if (navigator.clipboard && window.ClipboardItem) copia = navigator.clipboard.write([new ClipboardItem({ "image/png": imagem })]); } catch (e) { copia = null; }
+    (copia || Promise.reject(new Error("sem área de transferência")))
+      .then(() => w.printAviso("Print copiado: cole no slide com Ctrl+V (também foi baixado em PNG).", 6000))
+      .catch(() => imagem.catch(() => null));        // sem cópia, fica o arquivo baixado (e o aviso do relatório)
+  }));
+  $("btnOnePage").addEventListener("click", async () => {
+    const w = janela(); w.focus();
+    if (!w.gerarOnePage) { alert("Este relatório foi gerado por uma versão anterior do painel: atualize a análise para ter o One page."); return; }
+    filtrosEstado.view = "onepage"; aplicaFiltros();               // mostra a folha que vai para o PDF
+    w.gerarOnePage(await libsPdf());
+  });
+  quadro().addEventListener("load", () => { if (quadro().srcdoc) montaFiltros(); });
+
+  btnPasta.addEventListener("click", escolhePasta);
+  // ===== Export "Acompanhamento Mensal" (não aparece no painel nem no PDF) =====
+  // Gera no Python (análise já carregada) as tabelas da planilha semanal da SUP escolhida. As indiretas dividem o realizado
+  // de cada semana pelos dias úteis da semana: cada export guarda o realizado acumulado ("foto") no ajustes_relatorio.json,
+  // seção "acompanhamento", e o próximo usa a diferença.
+  let esperaAcomp = null;
+  $("btnAcomp").addEventListener("click", async () => {
+    if (!worker || esperaAcomp) return;
+    const b = $("btnAcomp"), texto = b.textContent;
+    b.disabled = true; b.textContent = "⏳ Gerando…";
+    try {
+      const sup = filtrosEstado.sup || "TODAS", ref = infoFiltros ? infoFiltros.mesAtual : "";
+      let fotos = [];
+      if (pastaHandle) {
+        const d = await window.arquivoCompartilhado.ler();
+        fotos = (d && d.acompanhamento && d.acompanhamento[ref] && d.acompanhamento[ref][sup]) || [];
+      }
+      const msg = await new Promise((ok) => { esperaAcomp = ok; worker.postMessage({ fase: "acompanhamento", sup, fotos }); });
+      if (msg.tipo === "acompanhamentoErro") { window.avisoSite("Não foi possível gerar o Acompanhamento: " + msg.motivo, true); return; }
+      const url = URL.createObjectURL(new Blob([msg.conteudo], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }));
+      const a = document.createElement("a"); a.href = url; a.download = msg.info.nome; document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+      if (pastaHandle) {                          // guarda a foto desta data (substitui a do mesmo dia)
+        const foto = msg.info.foto, r = msg.info.ref, sp = msg.info.sup;
+        const res = await window.arquivoCompartilhado.atualizar((d) => {
+          const m = (d.acompanhamento = d.acompanhamento || {}), mr = (m[r] = m[r] || {});
+          mr[sp] = (mr[sp] || []).filter((f) => f.ate !== foto.ate).concat([foto]).sort((x, y) => (x.ate < y.ate ? -1 : 1));
+        });
+        window.avisoSite(`Acompanhamento baixado (${msg.info.nome})` + (res.ok ? "." : ` — a semana não ficou guardada na pasta (${res.motivo}).`), !res.ok);
+      } else window.avisoSite(`Acompanhamento baixado (${msg.info.nome}). Sem pasta conectada, as indiretas dividem o realizado do mês pelos dias que já passaram.`);
+    } finally { b.disabled = false; b.textContent = texto; esperaAcomp = null; }
+  });
+  // Abrir um relatório já gerado (no celular: Relatorio_Faturamento.html da pasta). Escolher junto o ajustes_relatorio.json
+  // usa os ajustes mais recentes do arquivo no lugar dos que vieram embutidos.
+  $("btnAbrirRel").addEventListener("click", () => $("inputRelatorio").click());
+  $("btnFiltrosCel").addEventListener("click", () => {
+    const aberto = document.querySelector(".top").classList.toggle("filtros-abertos");
+    $("btnFiltrosCel").setAttribute("aria-expanded", aberto ? "true" : "false");
+  });
+  $("inputRelatorio").addEventListener("change", async () => {
+    const arqs = Array.from($("inputRelatorio").files || []);
+    $("inputRelatorio").value = "";
+    const h = arqs.find((f) => /\.html?$/i.test(f.name)), j = arqs.find((f) => /\.json$/i.test(f.name));
+    if (!h) { window.avisoSite("Escolha o arquivo do relatório (.html), ex.: Relatorio_Faturamento.html.", true); return; }
+    let html = await h.text();
+    if (j) {
+      try { html = comAjustes(html, JSON.parse(await j.text())); }
+      catch (e) { window.avisoSite("O arquivo de ajustes (.json) não pôde ser lido: usando os ajustes que vieram no relatório.", true); }
+    }
+    let mes = "";
+    try { const m = /id="info-filtros">([\s\S]*?)<\/script>/.exec(html); mes = m ? nomeMes(JSON.parse(m[1]).mesAtual) : ""; } catch (e) {}
+    const salvo = (/id="ajustes-copia" data-salvo="([^"]+)"/.exec(html) || [])[1];
+    htmlAtual = null;                             // relatório aberto de arquivo: não regrava a cópia
+    $("btnAcomp").hidden = true;                  // sem a análise carregada não há como gerar o Acompanhamento
+    $("titulo").textContent = "Faturamento" + (mes ? ` — ${mes}` : "") + " (relatório salvo)";
+    document.title = "Relatório" + (mes ? ` ${mes}` : "");
+    progresso.hidden = true;
+    $("fonteStatus").hidden = true;
+    $("quadroRelatorio").srcdoc = html;
+    $("quadroRelatorio").hidden = false;
+    $("vazioWrap").hidden = true;
+    document.body.classList.add("relatorio-aberto");
+    window.avisoSite(`Relatório "${h.name}" aberto` + (salvo ? ` · ajustes de ${new Date(salvo).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}` : "")
+      + " — somente leitura: as alterações são feitas no computador com a pasta conectada.");
+  });
+  // celular/tablet sem acesso a pastas: só o "Abrir relatório"
+  if (!("showDirectoryPicker" in window) && matchMedia("(pointer: coarse)").matches) document.body.classList.add("sem-pasta");
+  $("btnLimparCache").addEventListener("click", () => {
+    if (!confirm("Apagar os arquivos já lidos guardados neste navegador? A próxima análise vai ler todos os arquivos de novo.")) return;
+    pegaWorker().postMessage({ fase: "limparCache" });
+  });
+  btnAtualizar.addEventListener("click", atualiza);
+  btnEtapa2.addEventListener("click", () => { if (rodando || !pastaHandle) return; forcarEtapa2 = true; analisaHandle(pastaHandle); });
+  $("btnCopiarLog").addEventListener("click", () => {
+    const texto = $("logExecucao").textContent;
+    (navigator.clipboard ? navigator.clipboard.writeText(texto) : Promise.reject()).catch(() => {
+      const r = document.createRange(); r.selectNodeContents($("logExecucao"));
+      const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r);
+    });
+  });
+
+  inputPasta.addEventListener("change", async () => {
+    const lista = Array.from(inputPasta.files || []);
+    if (!lista.length) return;
+    iniciaExecucao();
+    const nomePasta = (lista[0].webkitRelativePath || "").split("/")[0] || "pasta";
+    try {
+      enviaParaAnalise(await lerListaArquivos(lista), nomePasta);
+    } catch (e) {
+      mostraErro("Não foi possível ler os arquivos.", String(e));
+    }
+  });
+
+  // ===== Ao abrir o site: aguarda a pasta conectada e tenta carregar os arquivos sozinho =====
+  // O navegador só deixa pedir de novo a permissão da pasta depois de um clique/tecla do usuário.
+  // Então: se a permissão já vale, carrega na hora; se não, a PRIMEIRA interação com a página
+  // (clique em qualquer lugar ou tecla) reconecta e carrega sozinha.
+  (async function inicia() {
+    if (!("showDirectoryPicker" in window)) return;
+    if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
+    const h = await idb.get("pasta");
+    if (!h) return;
+    pastaHandle = h;
+    nuvemInicial();
+    btnAtualizar.hidden = false;
+    btnEtapa2.hidden = false;
+    btnAtualizar.title = `Reler a pasta "${h.name}"`;
+    const nome = h.name ? ` <b>${h.name}</b>` : "";
+
+    let permissao = "prompt";
+    try { permissao = await h.queryPermission({ mode: "read" }); } catch (e) {}
+    if (permissao === "granted") {
+      setFonte(`Pasta anterior:${nome} — lendo os arquivos…`);
+      analisaHandle(h);
+      return;
+    }
+
+    // Tenta pedir a permissão já ao abrir (alguns navegadores deixam); senão, espera o 1º clique
+    try {
+      if ((await h.requestPermission({ mode: "read" })) === "granted") {
+        setFonte(`Pasta anterior:${nome} — lendo os arquivos…`);
+        analisaHandle(h);
+        return;
+      }
+    } catch (e) { /* precisa de um gesto do usuário */ }
+
+    setFonte(`Pasta anterior encontrada (${nome.trim() || "conectada"}) — <b>clique em qualquer lugar da página</b> para reconectar e carregar. No aviso do Chrome, escolha <b>Permitir em todas as visitas</b> para a conexão ser automática.`);
+    const reconecta = (ev) => {
+      document.removeEventListener("pointerdown", reconecta, true);
+      document.removeEventListener("keydown", reconecta, true);
+      if (rodando) return;
+      if (ev.target && ev.target.closest && ev.target.closest("#btnPasta")) return;   // quer escolher outra pasta
+      setFonte(`Reconectando${nome ? " com" + nome : ""}…`);
+      analisaHandle(h);
+    };
+    document.addEventListener("pointerdown", reconecta, true);
+    document.addEventListener("keydown", reconecta, true);
+  })();
+})();
+</script>
+</body>
+</html>

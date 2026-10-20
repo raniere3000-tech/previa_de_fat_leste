@@ -1,0 +1,394 @@
+{
+  "_comentario": "Regras de negócio editáveis sem mexer no código. Valores em m³ por economia.",
+  "rubricas_validas": [
+    "VALOR DE AGUA",
+    "VALOR DE ESGOTO"
+  ],
+  "situacao_conta_em_analise": "EM ANALISE",
+  "consumo_minimo_por_categoria": {
+    "COMERCIAL": 20,
+    "PEQ. COMERCIO": 10,
+    "PUB. ESTADUAL": 15,
+    "PUBLICA": 15,
+    "RESIDENCIAL": 15,
+    "SOCIAL": 15,
+    "SOCIAL ESPECIAL": 15,
+    "INDUSTRIAL": 20
+  },
+  "categoria_por_tipo_de_economia": {
+    "Qtd. Economia Residencial": "RESIDENCIAL",
+    "Qtd. Economia Comercial": "COMERCIAL",
+    "Qtd. Economia Industrial": "INDUSTRIAL",
+    "Qtd. Economia Publica": "PUBLICA"
+  },
+  "colunas_economia_todas": [
+    "Qtd. Economia Residencial",
+    "Qtd. Economia Comercial",
+    "Qtd. Economia Industrial",
+    "Qtd. Economia Publica",
+    "Qtd. Economia Outros"
+  ],
+  "colunas_economia_totais": [
+    "Qtd. Economia Residencial",
+    "Qtd. Economia Comercial",
+    "Qtd. Economia Industrial",
+    "Qtd. Economia Publica"
+  ],
+  "alerta_variacao_grafico": 0.4,
+  "destaque_queda_pct_top100": 50,
+  "texto_justificativa_padrao": "\n<p><strong>Grupo 519 (Água/Esgoto):</strong> crescimento expressivo de faturamento\ndevido à normalização de leituras represadas do mês anterior.</p>\n<p><strong>Grupo 520:</strong> queda de faturamento associada ao aumento de cortes\nno período (-3.286 ligações ativas vs Agosto/2026).</p>\n",
+  "rubricas_indiretas": {
+    "CORTE NO CAVALETE": "CORTE",
+    "CORTE NO REGISTRO": "CORTE",
+    "CORTE NO REGISTRO DE DERIVACAO - SEM PAVIMENTO": "CORTE",
+    "LIG. AGUA 1\" - VAZAO 7M³/H - ASFALTO": "LNA",
+    "LIG. AGUA 1,5\" - VAZAO 20M³/H - ASFALTO": "LNA",
+    "LIG. AGUA 1,5\" - VAZAO 20M³/H - PARALELO": "LNA",
+    "LIG. AGUA 1/2\" - VAZAO 3M³/H - ASFALTO": "LNA",
+    "LIG. AGUA 2\" - VAZAO 300M³/H - ASFALTO": "LNA",
+    "LIG. AGUA 3\" - VAZAO 1.100M³/H - TERRA": "LNA",
+    "LIG. AGUA 3/4\" - VAZAO 3M³/H - ASFALTO": "LNA",
+    "LIG. AGUA 3/4\" - VAZAO 3M³/H - CONCRETO": "LNA",
+    "LIG. AGUA 3/4\" - VAZAO 3M³/H - NO PASSEIO": "LNA",
+    "LIG. AGUA 3/4\" - VAZAO 3M³/H - PARALELO": "LNA",
+    "LIG. AGUA 3/4\" - VAZAO 3M³/H - TERRA": "LNA",
+    "LIG. AGUA 3/4\" - VAZAO 5M³/H - ASFALTO": "LNA",
+    "LIG. AGUA 3/4\" - VAZAO 5M³/H - NO PASSEIO": "LNA",
+    "LIG. AGUA 3/4\" - VAZAO 5M³/H - TERRA": "LNA",
+    "LIG. AGUA POPOULAR - PARALELO": "LNA",
+    "LIG. AS REDES PUB. DE AGUA E INTERV. 1/2\" RES": "LNA",
+    "LIG. AGUA 1/2\" - VAZAO 3M³/H - NO PASSEIO": "LNA",
+    "LIG. AGUA 3/4\" - VAZAO 5M³/H - PARALELO": "LNA",
+    "LIG. ESGOTO 150MM VIDRADO - TERRA - ASFALTO": "LNE",
+    "LIG. ESGOTO 150MM VIDRADO - TERRA - PARALELO": "LNE",
+    "LIG. ESGOTO 100MM FERRO FUNDIDO - TERRA - PARALELO": "LNE",
+    "LIG. ESGOTO 100MM VIDRADO - ROCHA - PASSEIO": "LNE",
+    "LIG. ESGOTO 100MM VIDRADO - TERRA - ASFALTO": "LNE",
+    "LIG. DE AGUAS INDUST. A REDE DE ESGOTO CIP": "LNE",
+    "RELIGACAO A PEDIDO": "RELIGAÇÃO",
+    "RELIGACAO NO REGISTRO": "RELIGAÇÃO",
+    "RELIGACAO NO REGISTRO DE DERIVACAO - COM PAVIMENTO": "RELIGAÇÃO",
+    "RELIGACAO COM LEVANTAMENTO TOTAL DO RAMAL": "RELIGAÇÃO",
+    "RELIGACAO NO CAVALETE": "RELIGAÇÃO",
+    "RELIGACAO NO REGISTRO DE DERIVACAO - SEM PAVIMENTO": "RELIGAÇÃO",
+    "ACRÉSCIMOS MANDADO JUDICIAL": "SANÇÃO",
+    "ACRESCIMOS POR REINCIDENCIA": "SANÇÃO",
+    "BY-PASS NO RAMAL 1/2\" CIP": "SANÇÃO",
+    "BY-PASS NO RAMAL 1/2\" RES": "SANÇÃO",
+    "BY-PASS NO RAMAL 3/4\" CIP": "SANÇÃO",
+    "BY-PASS NO RAMAL 3/4\" RES": "SANÇÃO",
+    "BY-PASS NO RAMAL 1\" CIP": "SANÇÃO",
+    "VIOLACAO DO CORTE - 1/2\" CIP": "SANÇÃO",
+    "VIOLACAO DO CORTE - 1/2\" RES": "SANÇÃO",
+    "VIOLACAO DO CORTE - 3/4\" CIP": "SANÇÃO",
+    "VIOLACAO DO CORTE - 3/4\" RES": "SANÇÃO",
+    "VIOLACAO DO LACRE CIP": "SANÇÃO",
+    "VIOLACAO DO LACRE RES": "SANÇÃO",
+    "VIOLACAO OU RETIRADA DE HD 1/2\" CIP": "SANÇÃO",
+    "VIOLACAO OU RETIRADA DE HD 1/2\" RES": "SANÇÃO",
+    "VIOLACAO OU RETIRADA DE HD 3/4\" RES": "SANÇÃO",
+    "COBRANCA RETROATIVA AGUA E/OU ESGOTO": "SANÇÃO",
+    "COBRANÇA RETROATIVA DE AGUA E ESGOTO - IRREG.": "SANÇÃO",
+    "LIG. AS REDES PUB. DE AGUA E INTERV. 3/4\" RES": "SANÇÃO",
+    "INTERCONEXAO DE SISTEMAS CIP": "SANÇÃO",
+    "DERIVACAO DE INSTALACAO PREDIAL CIP": "SANÇÃO",
+    "DERIVACAO DE INSTALACAO PREDIAL RES": "SANÇÃO",
+    "DIFERENCA CONSUMO AGUA": "SANÇÃO",
+    "DIFERENCA CONSUMO ESGOTO": "SANÇÃO",
+    "INFRACAO NAO PREVISTA CIP": "SANÇÃO",
+    "INFRACAO NAO PREVISTA RES": "SANÇÃO",
+    "INTERCALACAO DE DISPOSITIVO CIP": "SANÇÃO",
+    "INTERCONEXAO DE SISTEMAS RES": "SANÇÃO",
+    "INTERV. NAS INST. DE AGUA EM AREAS PUBLICAS RES": "SANÇÃO",
+    "IRREGULARIDADE NA LIGACAO DE ESGOTO": "SANÇÃO",
+    "NAO CUMPRIMENTO DE INTIMACAO CIP": "SANÇÃO",
+    "NAO CUMPRIMENTO DE INTIMACAO RES": "SANÇÃO",
+    "ABASTECIMENTO POR PIPA": "OUTROS",
+    "ABATIMENTO - M3": "OUTROS",
+    "DESCONTO FUTURO": "OUTROS",
+    "DESLOC. CAVALETE >1M - 3/4\" - ASFALTO": "OUTROS",
+    "DESLOCAMENTO DE CAVALETE ATÉ 1M - ASFALTO": "OUTROS",
+    "EMISSAO 2.A VIA NOTA FISCAL": "OUTROS",
+    "INSTALACAO DE CAIXA PADRAO": "OUTROS",
+    "INSTALACAO DE HIDRANTE - ASFALTO": "OUTROS",
+    "INSTALACAO DE HIDRANTE - TERRA": "OUTROS",
+    "IR": "OUTROS",
+    "IR ESTADUAL": "OUTROS",
+    "IR MUNICIPAL": "OUTROS",
+    "LIG. DE AGUAS PLUV. A REDE DE ESGOTO RES": "OUTROS",
+    "OBRAS DE AGUA SEM AUTORIZACAO CIP": "OUTROS",
+    "OBSTRUCAO DA REDE DE ESGOTO CIP": "OUTROS",
+    "OBSTRUCAO DA REDE DE ESGOTO RES": "OUTROS",
+    "SUB. HIDROMETRO ULTRASSONICO - 3\" - 1.100 m³/h": "OUTROS",
+    "SUBST. DE HD - 3/4\" - 3 M³/H - IRREG.": "OUTROS",
+    "SUBST. DE HD. - 1/2\" - 3 M³/H - IRREG.": "OUTROS",
+    "SUBSTITUIÇÃO DE NF BAIXADA INDEVIDAMENTE": "OUTROS",
+    "SUBSTITUICAO DE HIDROMETRO - 1\" - 10 M³/H": "OUTROS",
+    "SUBSTITUICAO DE HIDROMETRO - 1\" - 7 M³/H": "OUTROS",
+    "SUBSTITUICAO DE HIDROMETRO - 2\" - 300 M³/H": "OUTROS",
+    "SUBSTITUICAO DE HIDROMETRO - 3/4\" - 3 M³/H": "OUTROS",
+    "SUBSTITUICAO DE HIDROMETRO - 3/4\" - 5 M³/H": "OUTROS",
+    "SUBSTITUICAO DE LIMITADOR POR HIDROMETRO": "OUTROS",
+    "SUPRESSAO - LEVANTAMENTO RAMAL 3\"": "OUTROS",
+    "SUPRESSAO - LEVANTAMENTO RAMAL ATÉ 1\"": "OUTROS",
+    "UNIFICACAO PARCELAMENTO": "OUTROS",
+    "USO DE DISPOSITIVOS NAO APROVADOS CIP": "OUTROS",
+    "USO DE DISPOSITIVOS NAO APROVADOS RES": "OUTROS",
+    "VALOR JUDICIAL": "OUTROS",
+    "VALOR NEGOCIADO": "OUTROS",
+    "VISTORIA": "OUTROS",
+    "DESLOCAMENTO DE CAVALETE >1M - 3/4\"": "OUTROS",
+    "0": "EXCLUIR",
+    "COBRANÇA DE PARCELAS": "EXCLUIR",
+    "CRÉDITO DE ARRECADAÇÃO": "EXCLUIR"
+  },
+  "linhas_indiretas_dre": {
+    "CORTE": "RI Cortes/Recorte",
+    "RELIGAÇÃO": "RI Religações",
+    "LNA": "RI Ligações - Água",
+    "SANÇÃO": "RI Fiscalização",
+    "OUTROS": "RI Outros - Água",
+    "LNE": "Fat. de esgoto - Indireto"
+  },
+  "rubricas_cancelamento": [
+    "ABATIMENTO - M3",
+    "COFINS (3,00%) ART.64 LEI Nº 9.430/96",
+    "CRÉDITO DE ARRECADAÇÃO",
+    "CREDITO/DEBITO DE ARRECADACAO - VAN",
+    "DESCONTO",
+    "DESCONTO JUDICIAL PROVISORIO",
+    "IR ESTADUAL",
+    "IR MUNICIPAL"
+  ],
+  "superintendencias": {
+    "INTERIOR": [
+      "APERIBE",
+      "CAMBUCI",
+      "CACHOEIRAS DE MACACU",
+      "CANTAGALO",
+      "CASIMIRO DE ABREU",
+      "CORDEIRO",
+      "DUAS BARRAS",
+      "ITAOCARA",
+      "MIRACEMA",
+      "RIO BONITO",
+      "S.SEBASTIAO DO ALTO",
+      "S.FCO.DO ITABAPOANA"
+    ],
+    "LESTE": [
+      "ITABORAI",
+      "MARICA",
+      "SAO GONCALO",
+      "SAQUAREMA",
+      "TANGUA"
+    ]
+  },
+  "feriados_extras": [],
+  "situacao_lancamento_grupos": {
+    "_comentario": "Situacao Lancamento da fatura de ciclo -> grupo da visão sintética (Leitura da situação). Código fora da lista vai para 'Outros'.",
+    "04-7FIXADA AO PORTAO": "Entregue",
+    "02-1CAIXA CORREIO": "Entregue",
+    "50-EMITIDO - RETIDA": "Retida",
+    "01-3EM MAOS": "Entregue",
+    "61-RETIDA - CONSOLIDADO": "Público",
+    "05-2EMBX DO PORTAO": "Entregue",
+    "73-RETIDA - MED > 2X MED FATUR": "Aumento de Consumo",
+    "81-RETIDA - NFAG": "Retida",
+    "00-7NAO ENTREGUE": "Não Entregue",
+    "71-RETIDA - QUEDA DE CONSUMO F": "Queda de Consumo",
+    "56-RETIDA - LIGACAO BLOQUEADA": "Retida",
+    "03-4VIZINHO": "Entregue",
+    "06-5NA CAIXA DE LUZ": "Entregue",
+    "55-RETIDA - MED > 2X MED MEDID": "Aumento de Consumo",
+    "07-6NO HD": "Entregue",
+    "07 - RECALCULADA": "Retida"
+  },
+  "estrutura_tarifaria": {
+    "_comentario": "Estrutura tarifária padrão (Categoria, Limite Inicial, Limite Final, Tarifa Normal, Tarifa Progressiva) e mínimo por economia. Uma planilha na pasta com 'tarif' no nome ou com a aba tblTarifas (e tblMinimo) substitui estes valores.",
+    "faixas": [
+      [
+        "RESIDENCIAL",
+        0,
+        15,
+        5.6941,
+        6.5231
+      ],
+      [
+        "RESIDENCIAL",
+        16,
+        30,
+        14.3508,
+        14.3508
+      ],
+      [
+        "RESIDENCIAL",
+        31,
+        45,
+        19.5692,
+        19.5692
+      ],
+      [
+        "RESIDENCIAL",
+        46,
+        60,
+        39.1384,
+        39.1384
+      ],
+      [
+        "RESIDENCIAL",
+        61,
+        99999999999,
+        52.1845,
+        52.1845
+      ],
+      [
+        "SOCIAL",
+        0,
+        15,
+        2.0083,
+        2.0083
+      ],
+      [
+        "SOCIAL",
+        16,
+        30,
+        14.3508,
+        14.3508
+      ],
+      [
+        "SOCIAL",
+        31,
+        45,
+        19.5692,
+        19.5692
+      ],
+      [
+        "SOCIAL",
+        46,
+        60,
+        39.1384,
+        39.1384
+      ],
+      [
+        "SOCIAL",
+        61,
+        99999999999,
+        52.1845,
+        52.1845
+      ],
+      [
+        "COMERCIAL",
+        0,
+        20,
+        22.1784,
+        22.1784
+      ],
+      [
+        "COMERCIAL",
+        21,
+        30,
+        39.0731,
+        39.0731
+      ],
+      [
+        "COMERCIAL",
+        31,
+        99999999999,
+        41.7476,
+        41.7476
+      ],
+      [
+        "PEQ. COMERCIO",
+        0,
+        10,
+        22.1784,
+        22.1784
+      ],
+      [
+        "PEQ. COMERCIO",
+        11,
+        20,
+        22.1784,
+        22.1784
+      ],
+      [
+        "PEQ. COMERCIO",
+        21,
+        30,
+        39.0731,
+        39.0731
+      ],
+      [
+        "PEQ. COMERCIO",
+        31,
+        99999999999,
+        41.7476,
+        41.7476
+      ],
+      [
+        "INDUSTRIAL",
+        0,
+        20,
+        30.6584,
+        30.6584
+      ],
+      [
+        "INDUSTRIAL",
+        21,
+        30,
+        30.6584,
+        30.6584
+      ],
+      [
+        "INDUSTRIAL",
+        31,
+        130,
+        35.2245,
+        35.2245
+      ],
+      [
+        "INDUSTRIAL",
+        131,
+        99999999999,
+        37.1814,
+        37.1814
+      ],
+      [
+        "PUBLICA",
+        0,
+        15,
+        8.6105,
+        8.6105
+      ],
+      [
+        "PUBLICA",
+        16,
+        99999999999,
+        19.0474,
+        19.0474
+      ],
+      [
+        "PUB. ESTADUAL",
+        0,
+        15,
+        7.5161,
+        7.5161
+      ],
+      [
+        "PUB. ESTADUAL",
+        16,
+        99999999999,
+        16.6265,
+        16.6265
+      ]
+    ],
+    "minimos": {
+      "RESIDENCIAL": 15,
+      "SOCIAL": 15,
+      "INDUSTRIAL": 20,
+      "PUBLICA": 15,
+      "PEQ. COMERCIO": 10,
+      "COMERCIAL": 20
+    }
+  }
+}

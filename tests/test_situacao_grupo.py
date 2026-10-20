@@ -1,0 +1,107 @@
+# -*- coding: utf-8 -*-
+"""Coluna "Situação" das tabelas da aba Diretas: Liberado / Em Análise / LIS / Aguardando."""
+import datetime as dt
+import re
+
+import pandas as pd
+import pytest
+
+from dados_sinteticos import gera_pasta
+from faturamento import Sessao
+
+
+@pytest.fixture(scope="module")
+def sessao(tmp_path_factory):
+    pasta = str(tmp_path_factory.mktemp("sitgrupo"))
+    gera_pasta(pasta, n_meses=2, grupos_faltando=3)          # grupos 06, 07 e 08 ainda sem fatura no mês
+    s = Sessao(pasta, progresso=lambda p, t: None)
+    s.ctx.data_corte = dt.date(2026, 9, 10)                    # hoje = 11/09: o cronograma lê o grupo 07 (dia 11)
+    s.preparar()
+    s.continuar()
+    return s
+
+
+def test_regras_da_situacao(sessao):
+    from faturamento.situacao_grupo import situacao_dos_grupos
+    ctx = sessao.ctx
+    sit = situacao_dos_grupos(ctx)
+    assert sit["7"] == "LIS" and sit["8"] == "Aguardando" and sit["6"] == "Aguardando"     # 06: dia já passou, sem nenhuma linha
+    at = ctx.df_atual[ctx.df_atual["Grupo"].astype(str).str.lstrip("0").isin(["1", "2", "3", "4", "5"])]
+    analise = set(at.loc[at["Situacao Conta"] == "EM ANALISE", "Grupo"].astype(str).str.lstrip("0"))
+    for g in ("1", "2", "3", "4", "5"):
+        assert sit[g] == ("Em Análise" if g in analise else "Liberado"), g
+    assert analise and len(analise) < 5                        # os dados têm os dois casos
+
+
+def test_coluna_situacao_nas_tabelas_de_diretas(sessao):
+    html = open(sessao.caminho_html, encoding="utf-8").read()
+    diretas = html[html.index('id="view-tabelas"'):html.index('id="view-analise"')]
+    tab = diretas[diretas.index('id="tabela-agua"'):]
+    tab = tab[:tab.index("</table>")]
+    assert '<th rowspan="2" title="LIS' in tab and ">Situação</th>" in tab
+    linhas = re.findall(r'<tr class="([^"]*)" data-grupo="([^"]*)"', tab)
+    pend = [g for c, g in linhas if c == "linha-pendente"]
+    assert pend == ["06", "07", "08"]                          # LIS e Aguardando: mês atual zerado, mês anterior com valores
+    assert re.search(r'data-grupo="07"[^>]*>\s*<td data-field="grupo">07</td>\s*<td data-field="situacao"><span class="sit-grupo sit-lis" '
+                     r'role="button" tabindex="0" data-sit-auto="LIS" data-sit-grupo="7" data-sit-ref="09/2026"[^>]*>LIS</span>', tab)
+    assert re.search(r'sit-liberado"[^>]*data-sit-auto="Liberado"[^>]*>Liberado</span>', tab)
+    assert re.search(r'sit-analise"[^>]*data-sit-auto="Em Análise"[^>]*>Em Análise</span>', tab)
+    # linha pendente: atual 0 e o mês anterior do grupo (como a tabela contra o orçado); entra no total
+    p = tab[tab.index('class="linha-pendente"'):]
+    p = p[:p.index("</tr>")]
+    m = re.search(r'data-fat-atual="([^"]*)" data-fat-anterior="([^"]*)"', p)
+    assert m and float(m.group(1)) == 0 and float(m.group(2)) > 0
+    assert re.search(r'data-field="delta-pct-fat"[^>]*>-100,0%', p)
+
+
+def test_grupo_lido_so_no_consumo_usa_a_situacao_do_consumo():
+    from faturamento.situacao_grupo import resumo_situacao_conta
+    cons = pd.DataFrame({"Grupo_consumo": ["9", "9", "10"], "Referência": ["09/2026"] * 3,
+                         "Situacao Conta": ["LIBERADA", "EM ANALISE", "LIBERADA"]})
+    r = resumo_situacao_conta(cons, "Grupo_consumo", "Referência").set_index("g")
+    assert bool(r.loc["9", "em_analise"]) and not bool(r.loc["10", "em_analise"]) and bool(r.loc["10", "liberada"])
+
+
+def test_selo_manual_sem_sombra_interna():
+    """O html2canvas pinta o selo inteiro com box-shadow inset (no PDF ficava um borrão sem texto): usa borda."""
+    import os
+    import re
+    css = open(os.path.join(os.path.dirname(__file__), "..", "faturamento", "assets", "relatorio.css"), encoding="utf-8").read()
+    regra = re.search(r"\.sit-manual \{([^}]*)\}", css).group(1)
+    assert "inset" not in regra and "border:" in regra
+
+
+def test_pdf_sem_contorno_no_selo_manual():
+    import os
+    css = open(os.path.join(os.path.dirname(__file__), "..", "faturamento", "assets", "relatorio.css"), encoding="utf-8").read()
+    assert "#view-executivo .sit-manual { border-color:transparent; }" in css
+
+
+def test_lis_grupo_lido_em_varios_dias_e_grupo_com_ponto_zero():
+    """Grupo com rotas lidas em dias diferentes fica LIS do primeiro ao último dia; "504.0" no cronograma = "504"."""
+    import datetime as dt
+    from types import SimpleNamespace
+    import pandas as pd
+    from faturamento.situacao_grupo import situacao_dos_grupos
+    crono = pd.DataFrame({"Grupo": ["504.0", "504.0", "505", "503"],
+                          "Data da Leitura": ["14/10/2026", "17/10/2026", "20/10/2026", "13/10/2026"],
+                          "Referencia Cronograma": ["10/2026"] * 4})
+    resumo = pd.DataFrame({"g": ["504", "503"], "ref": ["10/2026", "10/2026"], "n": [10, 8],
+                           "em_analise": [True, False], "liberada": [False, True]})
+    ctx = SimpleNamespace(data_corte=dt.date(2026, 10, 15), ref_atual="10/2026", cronograma_leitura=crono,
+                          situacao_conta_resumo=resumo, fatura_total=None, situacao_grupo=None)
+    sit = situacao_dos_grupos(ctx)                             # "hoje" = 16/10/2026
+    assert sit["504"] == "LIS" and sit["505"] == "Aguardando" and sit["503"] == "Liberado"
+
+
+def test_datas_do_cronograma_em_excel_entram_na_semana_certa():
+    """Cronograma em Excel traz a data como '2026-10-13 00:00:00': era lida como ano-dia-mês (dia acima de 12 ficava
+    sem data e o grupo caía em "Sem semana" no One page; o dia 05/10 virava 10/05)."""
+    from types import SimpleNamespace
+    from faturamento.situacao_grupo import _datas_de_leitura
+    crono = pd.DataFrame({"Grupo": ["508", "507", "507", "509"],
+                          "Data da Leitura": ["2026-10-05 00:00:00", "2026-10-13 00:00:00", "2026-10-14 00:00:00", "20/10/2026"],
+                          "Referencia Cronograma": ["10/2026"] * 4})
+    datas = _datas_de_leitura(SimpleNamespace(cronograma_leitura=crono), "10/2026")
+    assert datas == {"507": (dt.date(2026, 10, 13), dt.date(2026, 10, 14)), "508": (dt.date(2026, 10, 5),) * 2,
+                     "509": (dt.date(2026, 10, 20),) * 2}
