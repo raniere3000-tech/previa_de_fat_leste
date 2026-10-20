@@ -146,6 +146,23 @@ function limpaDir(FS, caminho) {
   FS.mkdirTree(caminho);
 }
 
+// Lê o conteúdo de um arquivo da pasta. Em pastas do SharePoint/OneDrive o arquivo pode mudar entre a listagem e a
+// leitura (baixado sob demanda, sincronizado ou aberto no Excel) e o navegador dá "The requested file could not be
+// read": pega o arquivo de novo pela pasta e tenta mais algumas vezes antes de desistir.
+async function leConteudo(arq) {
+  let ultimo;
+  try { return await arq.arquivo.arrayBuffer(); } catch (e) { ultimo = e; }
+  if (arq.handle) {
+    for (let tentativa = 1; tentativa <= 3; tentativa++) {
+      await new Promise((ok) => setTimeout(ok, 1500 * tentativa));
+      try { return await (await arq.handle.getFile()).arrayBuffer(); } catch (e) { ultimo = e; }
+    }
+  }
+  throw new Error(`Não foi possível ler o arquivo "${arq.nome}" (${ultimo && ultimo.name || "erro de leitura"}). ` +
+    "Se a pasta é do SharePoint/OneDrive, clique com o botão direito nela e escolha \"Sempre manter neste dispositivo\", " +
+    "espere a sincronização terminar e feche o arquivo no Excel; depois analise de novo.");
+}
+
 // Fase 1: lê a pasta e devolve o Top 20 para o usuário conferir
 async function fasePreparar(arquivos) {
   const pyodide = await iniciaPyodide();
@@ -175,7 +192,7 @@ async function fasePreparar(arquivos) {
       meta[rel] = { id, tamanho, em_cache: true };
       reaproveitados++;
     } else {
-      const conteudo = arq.conteudo || await arq.arquivo.arrayBuffer();
+      const conteudo = arq.conteudo || await leConteudo(arq);
       FS.writeFile(`${PASTA}/${rel}`, new Uint8Array(conteudo));
       meta[rel] = { id, tamanho, em_cache: false, modificado: arq.modificado || 0 };
     }
