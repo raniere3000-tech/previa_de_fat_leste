@@ -12,7 +12,7 @@ from .leitura import (chave_grupo, classifica_arquivos, compacta_textos, nome_re
 
 
 COLUNAS_DESCARTADAS = ["Leitura Atual", "Total Economias", "Qtd. Tipos de Economia", "Mes Lancamento",
-                       "Ano Lancamento", "Data de Vencimento", "Aba/Mês Cronograma"]
+                       "Ano Lancamento", "Aba/Mês Cronograma"]      # Data de Vencimento fica: Excel de Grandes Clientes
 
 
 def localidade_por_grupo(crono):
@@ -165,6 +165,8 @@ def monta_base(ctx):
     if lida:
         ctx.bases_info_extra = [{"tipo": "Estrutura tarifária", "arquivo": arq_tarifa, "linhas": len(lida["faixas"]), "periodo": "",
                                  "extra": f"{len(lida['minimos'])} mínimos por economia"}]
+    from .grandes_clientes import carrega_lista
+    carrega_lista(ctx)                             # lista de matrículas GC da pasta (Excel de Grandes Clientes, aba Dados)
     print(f"✅ Fatura: {len(fatura_total)} linhas")
     if len(fatura_total) and "Referencia de Leitura" in fatura_total.columns:
         sem_ref = int(fatura_total["Referencia de Leitura"].isna().sum())

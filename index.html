@@ -410,7 +410,7 @@ body.sem-pasta #btnPasta, body.sem-pasta #btnLimparCache { display: none; }
 <header class="top">
   <div class="top-linha">
     <div>
-      <div class="eyebrow">Águas do Rio • Relatório Executivo <span class="versao-nuvem"><span class="versao" id="versao">v116</span><button type="button" class="nuvem nuvem-erro" id="nuvem" title="Sem pasta conectada: as alterações ficam só neste navegador" aria-label="Situação do salvamento na nuvem"></button></span></div>
+      <div class="eyebrow">Águas do Rio • Relatório Executivo <span class="versao-nuvem"><span class="versao" id="versao">v117</span><button type="button" class="nuvem nuvem-erro" id="nuvem" title="Sem pasta conectada: as alterações ficam só neste navegador" aria-label="Situação do salvamento na nuvem"></button></span></div>
       <h1 id="titulo">Análise de Faturamento — Água e Esgoto</h1>
     </div>
     <div class="filtros" id="filtros">
@@ -572,7 +572,7 @@ body.sem-pasta #btnPasta, body.sem-pasta #btnLimparCache { display: none; }
   // que é guardado aqui (pasta conectada, arquivos já lidos, edições) leva este prefixo para não misturar as pastas.
   const ESCOPO = "previa_de_fat_leste";
   window.ESCOPO_ARMAZENAMENTO = ESCOPO;            // o relatório (quadro) usa o mesmo prefixo
-  const VERSAO_SITE = "v116-20261020"; // muda a cada alteração: o selo do cabeçalho é derivado daqui
+  const VERSAO_SITE = "v117-20261021"; // muda a cada alteração: o selo do cabeçalho é derivado daqui
   try { document.getElementById("versao").textContent = VERSAO_SITE.split("-")[0]; } catch (e) {}
   const EXTENSOES = [".csv", ".xlsx", ".xls"];
   const SAIDAS = {
@@ -915,6 +915,7 @@ body.sem-pasta #btnPasta, body.sem-pasta #btnLimparCache { display: none; }
     else if (msg.tipo === "cacheLimpo") { $("statusNota").textContent = "Arquivos guardados apagados: a próxima análise lê todos os arquivos de novo."; }
     else if (msg.tipo === "concluido") { salvaEta(); abreRelatorio(msg); }
     else if (msg.tipo === "acompanhamento" || msg.tipo === "acompanhamentoErro") { if (esperaAcomp) { esperaAcomp(msg); esperaAcomp = null; } }
+    else if (msg.tipo === "gc" || msg.tipo === "gcErro") { if (esperaGC) { esperaGC(msg); esperaGC = null; } }
   }
 
   function abreRelatorio({ saidas, refAtual, refAnterior }) {
@@ -1662,6 +1663,21 @@ body.sem-pasta #btnPasta, body.sem-pasta #btnLimparCache { display: none; }
       } else window.avisoSite(`Acompanhamento baixado (${msg.info.nome}). Sem pasta conectada, as indiretas dividem o realizado do mês pelos dias que já passaram.`);
     } finally { b.disabled = false; b.textContent = texto; esperaAcomp = null; }
   });
+  // ===== Excel de Grandes Clientes (botão "GC" da aba Dados do relatório) =====
+  // O relatório manda a lista (planilha da pasta + adicionadas); o Python, com a análise já carregada, monta o Excel com
+  // todos os meses. Devolve { ok, info | motivo } para o relatório mostrar a mensagem.
+  let esperaGC = null;
+  window.baixarGC = async (lista) => {
+    if (!worker || !$("btnAcomp") || $("btnAcomp").hidden)
+      return { ok: false, motivo: "a análise não está carregada neste site: clique em Selecionar pasta e analisar (ou Atualizar) e tente de novo" };
+    if (esperaGC) return { ok: false, motivo: "o Excel de GC ainda está sendo gerado" };
+    const msg = await new Promise((ok) => { esperaGC = ok; worker.postMessage({ fase: "gc", lista }); });
+    if (msg.tipo === "gcErro") return { ok: false, motivo: msg.motivo };
+    const url = URL.createObjectURL(new Blob([msg.conteudo], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }));
+    const a = document.createElement("a"); a.href = url; a.download = msg.info.nome; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+    return { ok: true, info: msg.info };
+  };
   // Abrir um relatório já gerado (no celular: Relatorio_Faturamento.html da pasta). Escolher junto o ajustes_relatorio.json
   // usa os ajustes mais recentes do arquivo no lugar dos que vieram embutidos.
   $("btnAbrirRel").addEventListener("click", () => $("inputRelatorio").click());
