@@ -684,3 +684,12 @@ table.op-mini .num { text-align:right; }
 .tabela-cortadas { width:100%; border-collapse:collapse; font-size:12.5px; }
 .tabela-cortadas th { position:sticky; top:0; background:#1b3a5c; color:#fff; padding:6px; }
 .tabela-cortadas td { padding:4px 6px; border-bottom:1px solid #e5ebf2; text-align:center; }
+/* Aba Dados: cada matrícula GC é um tópico que abre (mesma cara de Avisos / Bases carregadas) */
+#gcLista .gc-mat > summary { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+#gcLista .gc-mat > summary::before { content:"▶"; font-size:11px; }
+#gcLista .gc-mat[open] > summary::before { content:"▼"; }
+#gcLista .gc-mat > summary { list-style:none; }
+#gcLista .gc-mat > summary::-webkit-details-marker { display:none; }
+#gcLista .gc-sub { font-weight:500; color:#4a5a6a; font-size:13px; }
+#gcLista .gc-falta { color:#b42318; }
+#gcLista .gc-tirar { margin-left:auto; }

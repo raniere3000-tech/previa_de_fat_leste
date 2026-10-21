@@ -168,11 +168,58 @@ def _por_mes(an, cadastro, refs, coluna, com_totais=True):
     return t
 
 
+def _combinado(an, cadastro, refs):
+    """Aba principal: uma linha por matrícula e, para cada mês, Faturado | Consumo | Vencimento lado a lado."""
+    t = cadastro.copy()
+    campos = (("Faturado Total (R$)", "Faturado (R$)"), ("Consumo Faturado Água (m³)", "Consumo (m³)"),
+              ("Data de Vencimento", "Vencimento"))
+    piv = {c: (an.pivot_table(index="Matrícula", columns="Referência", values=c, aggfunc="first") if len(an) else pd.DataFrame())
+           for c, _ in campos}
+    for r in refs:
+        for c, rotulo in campos:
+            p = piv[c]
+            t[f"{nome_mes_curto(r)} {rotulo}"] = t["Matrícula"].map(p[r]) if r in p.columns else None
+    return t
+
+
+def _texto_data(v):
+    if v is None or (isinstance(v, float) and np.isnan(v)):
+        return ""
+    return v.strftime("%d/%m/%Y") if hasattr(v, "strftime") else str(v)
+
+
+def _num(v):
+    try:
+        v = float(v)
+    except (TypeError, ValueError):
+        return None
+    return None if np.isnan(v) else round(v, 2)
+
+
+def dados_gc(ctx, lista):
+    """Dados da tela (aba Dados): por matrícula, cadastro e os meses [ref, vencimento, medido, água, esgoto (m³),
+    faturado água, esgoto, total]."""
+    an, refs, cad = monta_gc(ctx, lista)
+    por_mat = {}
+    for r in an.to_dict("records"):
+        por_mat.setdefault(r["Matrícula"], []).append([
+            r["Referência"], _texto_data(r["Data de Vencimento"]), _num(r["Consumo Medido (m³)"]),
+            _num(r["Consumo Faturado Água (m³)"]), _num(r["Volume Esgoto (m³)"]), _num(r["Faturado Água (R$)"]),
+            _num(r["Faturado Esgoto (R$)"]), _num(r["Faturado Total (R$)"])])
+    texto = lambda v: None if v is None or (isinstance(v, float) and np.isnan(v)) else str(v)
+    return {"refs": refs, "matriculas": [
+        {"mat": c["Matrícula"], "tipo": c["Tipo"], "nome": texto(c["Nome Cliente"]), "cat": texto(c["Categoria"]),
+         "grupo": texto(c["Grupo"]), "achada": c["Matrícula"] in por_mat, "meses": por_mat.get(c["Matrícula"], [])}
+        for c in cad.to_dict("records")]}
+
+
 def gera_xlsx_gc(ctx, lista):
-    """(bytes do .xlsx, nome do arquivo, info) — abas Faturamento, Consumo, Vencimento (matrícula × mês) e Analítico."""
+    """(bytes do .xlsx, nome do arquivo, info) — aba GC (por mês: faturado, consumo e vencimento lado a lado), abas
+    Faturamento, Consumo e Vencimento (matrícula × mês) e Analítico (matrícula × mês, todas as colunas)."""
     from .tabelas_html import motor_excel
     an, refs, cadastro = monta_gc(ctx, lista)
     abas = {
+        "GC": _combinado(an, cadastro, refs),
         "Faturamento (R$)": _por_mes(an, cadastro, refs, "Faturado Total (R$)"),
         "Consumo (m³)": _por_mes(an, cadastro, refs, "Consumo Faturado Água (m³)"),
         "Vencimento": _por_mes(an, cadastro, refs, "Data de Vencimento", com_totais=False),
@@ -193,10 +240,13 @@ def gera_xlsx_gc(ctx, lista):
 
 
 def gera_card_gc_html(ctx):
-    """Cartão da aba Dados: lista do arquivo + matrículas adicionadas (relatorio.js) e o botão que baixa o Excel."""
+    """Cartão da aba Dados: botão do Excel, campo para adicionar e cada matrícula como um tópico que abre (relatorio.js),
+    com faturamento, consumo e vencimento mês a mês. Os dados das matrículas da planilha vêm embutidos; os das adicionadas
+    o site busca na análise carregada."""
     lista = getattr(ctx, "gc_lista", None) or []
     arquivos = sorted({i["arquivo"] for i in lista})
-    dados = json.dumps({"lista": [{"mat": i["mat"], "tipo": i["tipo"]} for i in lista], "arquivos": arquivos},
+    dados = json.dumps({"lista": [{"mat": i["mat"], "tipo": i["tipo"]} for i in lista], "arquivos": arquivos,
+                        "dados": dados_gc(ctx, lista) if lista else {"refs": [], "matriculas": []}},
                        ensure_ascii=False).replace("</", "<\\/")
     origem = (f'Lista da pasta: <b>{html.escape(", ".join(arquivos))}</b>.' if arquivos else
               'Nenhuma planilha de matrículas GC na pasta (colunas <b>Matricula</b> e <b>TIPO</b>, ex.: "Matriculas Leste GC.xlsx").')
@@ -204,8 +254,8 @@ def gera_card_gc_html(ctx):
 <div class="card gc-card" id="gc-card">
   <div class="gar-topo"><h2>Grandes Clientes (GC)</h2>
     <button type="button" class="btn-filtro" id="gcBaixar" title="Baixar faturamento, consumo e data de vencimento de todos os meses das matrículas da lista (Excel)">&#11015; GC (Excel)</button></div>
-  <p class="nota-secao">Faturamento (água + esgoto), consumo faturado e data de vencimento, <b>mês a mês</b> (todos os meses da pasta), das
-  matrículas da lista. {origem} Para incluir mais: acrescente linhas na planilha da pasta e analise de novo, ou digite abaixo
+  <p class="nota-secao">Clique em uma matrícula para abrir o faturamento (água + esgoto), o consumo e a data de vencimento <b>mês a mês</b>
+  (todos os meses da pasta). {origem} Para incluir mais: acrescente linhas na planilha da pasta e analise de novo, ou digite abaixo
   (ficam salvas na pasta, para todos).</p>
   <div class="gar-barra gar-entrada">
     <label for="gcEntrada">Matrículas</label>
@@ -214,7 +264,7 @@ def gera_card_gc_html(ctx):
     <button type="button" class="btn-just" id="gcAdicionar">Adicionar</button>
     <span class="gar-msg" id="gcMsg" role="status"></span>
   </div>
-  <div class="tabela-wrap"><table class="tabela-dados" id="gcTabela"><thead><tr><th>Matrícula</th><th>Tipo</th><th>Origem</th><th></th></tr></thead><tbody></tbody></table></div>
+  <div id="gcLista"></div>
 </div>
 <script type="application/json" id="gc-dados">{dados}</script>
 """

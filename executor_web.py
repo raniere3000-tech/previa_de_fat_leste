@@ -44,6 +44,12 @@ def grandes_clientes(lista_json, caminho):
     return json.dumps(info, ensure_ascii=False)
 
 
+def grandes_clientes_dados(lista_json):
+    """Dados das matrículas GC para a tela da aba Dados (as adicionadas no relatório não vêm embutidas)."""
+    from faturamento.grandes_clientes import dados_gc
+    return json.dumps(dados_gc(_estado["sessao"].ctx, json.loads(lista_json or "[]")), ensure_ascii=False)
+
+
 def acompanhamento(sup, fotos_json, caminho):
     """Export "Acompanhamento Mensal" (botão do site): grava o .xlsx em `caminho` e devolve JSON com o nome do arquivo
     e a "foto" do realizado acumulado das indiretas, que o site guarda no ajustes_relatorio.json para o próximo export."""

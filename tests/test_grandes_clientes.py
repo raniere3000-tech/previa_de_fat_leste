@@ -8,7 +8,7 @@ import pytest
 
 from dados_sinteticos import gera_pasta
 from faturamento import Sessao
-from faturamento.grandes_clientes import chave_matricula, gera_xlsx_gc, monta_gc
+from faturamento.grandes_clientes import chave_matricula, dados_gc, gera_xlsx_gc, monta_gc
 from faturamento.leitura import identifica_tipo
 
 
@@ -65,12 +65,29 @@ def test_excel_tem_as_abas_por_mes_e_marca_as_nao_encontradas(sessao_gc):
     assert nome.startswith("GC_Faturamento_Consumo_") and nome.endswith(".xlsx")
     assert info == {"nome": nome, "matriculas": 4, "encontradas": 3, "meses": 3}
     abas = pd.read_excel(io.BytesIO(conteudo), sheet_name=None, dtype={"Matrícula": str})
-    assert list(abas) == ["Faturamento (R$)", "Consumo (m³)", "Vencimento", "Analítico"]
+    assert list(abas) == ["GC", "Faturamento (R$)", "Consumo (m³)", "Vencimento", "Analítico"]
+    gc = abas["GC"]                                   # aba principal: por mês, faturado | consumo | vencimento lado a lado
+    meses = [c[:-len(" Faturado (R$)")] for c in gc.columns if c.endswith(" Faturado (R$)")]
+    assert len(meses) == 3
+    for m in meses:
+        assert gc[f"{m} Consumo (m³)"].iloc[:2].notna().all() and gc[f"{m} Vencimento"].iloc[:2].notna().all()
     fat = abas["Faturamento (R$)"]
     assert list(fat["Matrícula"]) == ["100003", "100007", "999999999", "100010"]
     assert fat.loc[2, "Nome Cliente"] == "NÃO ENCONTRADA NA BASE"
     assert {"Média", "Total"}.issubset(fat.columns) and len([c for c in fat.columns if "/" in c]) == 3
     assert abas["Vencimento"].iloc[0, 5:].notna().any()
+
+
+def test_dados_da_tela_tem_consumo_e_vencimento_por_mes(sessao_gc):
+    d = dados_gc(sessao_gc.ctx, [{"mat": "100003", "tipo": "GC"}, {"mat": "999999999", "tipo": "GC"}])
+    assert len(d["refs"]) == 3
+    m, falta = d["matriculas"]
+    assert m["achada"] and not falta["achada"] and falta["meses"] == []
+    assert len(m["meses"]) == 3
+    for ref, venc, medido, agua, esgoto, val_a, val_e, total in m["meses"]:
+        assert len(venc) == 10 and venc[2] == "/" and agua > 0 and total == pytest.approx(val_a + val_e, abs=0.01)
+    html = open(sessao_gc.caminho_html, encoding="utf-8").read()
+    assert '"meses":' in html and 'id="gcLista"' in html          # matrículas da planilha já vêm com os dados
 
 
 def test_site_e_worker_ligam_o_botao_ao_python():
@@ -81,5 +98,6 @@ def test_site_e_worker_ligam_o_botao_ao_python():
     executor = open(os.path.join(raiz, "executor_web.py"), encoding="utf-8").read()
     assert "window.baixarGC = async (lista)" in site and 'fase: "gc"' in site
     assert '"faturamento/grandes_clientes.py"' in worker and 'fase === "gc"' in worker
-    assert "def grandes_clientes(lista_json, caminho)" in executor
+    assert "def grandes_clientes(lista_json, caminho)" in executor and "def grandes_clientes_dados(lista_json)" in executor
+    assert "window.dadosGC = async (lista)" in site and 'fase === "gcDados"' in worker and "window.parent.dadosGC" in rel
     assert "criaSync('gc'" in rel and "window.parent.baixarGC" in rel and "await syncGC.empurrar()" in rel

@@ -292,11 +292,24 @@ async function faseGC(lista) {
   avisa("gc", { info, conteudo: bytes.buffer }, [bytes.buffer]);
 }
 
+async function faseGCDados(lista) {
+  const pyodide = await iniciaPyodide();
+  const f = pyodide.globals.get("grandes_clientes_dados");
+  const dados = JSON.parse(f(JSON.stringify(lista || [])));
+  f.destroy();
+  avisa("gcDados", { dados });
+}
+
 self.onmessage = async (evento) => {
   const { fase, arquivos, ajustes } = evento.data;
   if (fase === "acompanhamento") {
     try { await faseAcompanhamento(evento.data.sup, evento.data.fotos); }
     catch (erro) { avisa("acompanhamentoErro", { motivo: String((erro && erro.message) || erro).split("\n").slice(-3).join(" ") }); }
+    return;
+  }
+  if (fase === "gcDados") {
+    try { await faseGCDados(evento.data.lista); }
+    catch (erro) { avisa("gcDadosErro", { motivo: String((erro && erro.message) || erro).split("\n").slice(-3).join(" ") }); }
     return;
   }
   if (fase === "gc") {

@@ -3360,17 +3360,50 @@ function gcLista() {                                  // planilha da pasta prime
     Object.keys(gcExtras).forEach((m) => { if (!vistos.has(m)) { vistos.add(m); lista.push({ mat: m, tipo: gcExtras[m].tipo || 'GC', origem: 'adicionada' }); } });
     return lista;
 }
-function gcDesenhar() {
-    const corpo = document.querySelector('#gcTabela tbody');
-    if (!corpo) return;
-    const lista = gcLista();
-    corpo.innerHTML = lista.length ? lista.map((i) => `<tr><td>${gcEsc(i.mat)}</td><td>${gcEsc(i.tipo)}</td><td>${i.origem === 'pasta'
-        ? 'Planilha da pasta' : 'Adicionada no relatório'}</td><td>${i.origem === 'pasta' ? ''
-        : `<button type="button" class="btn-just" data-gc-tirar="${gcEsc(i.mat)}" title="Tirar a matrícula ${gcEsc(i.mat)} da lista" aria-label="Tirar a matrícula ${gcEsc(i.mat)} da lista">✕</button>`}</td></tr>`).join('')
-        : '<tr><td colspan="4">Nenhuma matrícula na lista.</td></tr>';
-    const b = document.getElementById('gcBaixar');
-    if (b) b.textContent = `⬇ GC (Excel) · ${lista.length} matrícula${lista.length === 1 ? '' : 's'}`;
+// Dados por matrícula (mês a mês): os da planilha vêm embutidos; os das adicionadas o site busca na análise carregada
+const gcDadosPorMat = {};
+(GC_DADOS.dados && GC_DADOS.dados.matriculas || []).forEach((m) => { gcDadosPorMat[m.mat] = m; });
+const gcAbertas = new Set();
+const gcN = (v, d) => (v == null ? '—' : Number(v).toLocaleString('pt-BR', { minimumFractionDigits: d, maximumFractionDigits: d }));
+const gcM3 = (v) => (v == null ? '—' : Number(v).toLocaleString('pt-BR', { maximumFractionDigits: 1 }));   // m³: decimal só se houver
+const gcMes = (ref) => { const [m, a] = String(ref).split('/'); return ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'][parseInt(m, 10) - 1] + '/' + String(a).slice(-2); };
+let gcBuscando = false;
+async function gcBuscarDados() {                     // completa as adicionadas que ainda não têm dados (site com a análise carregada)
+    const faltam = gcLista().filter((i) => !gcDadosPorMat[i.mat]).map((i) => ({ mat: i.mat, tipo: i.tipo }));
+    if (!faltam.length || gcBuscando) return;
+    let fn = null;
+    try { fn = window.parent && window.parent !== window ? window.parent.dadosGC : null; } catch (e) { fn = null; }
+    if (typeof fn !== 'function') return;
+    gcBuscando = true;
+    try { const r = await fn(faltam); if (r && r.matriculas) { r.matriculas.forEach((m) => { gcDadosPorMat[m.mat] = m; }); gcDesenhar(); } }
+    catch (e) { /* fica sem dados até a próxima análise */ }
+    finally { gcBuscando = false; }
 }
+function gcDesenhar() {
+    const caixa = document.getElementById('gcLista');
+    if (!caixa) return;
+    const lista = gcLista();
+    caixa.innerHTML = lista.length ? lista.map((i) => {
+        const d = gcDadosPorMat[i.mat], ult = d && d.meses.length ? d.meses[d.meses.length - 1] : null;
+        const tirar = i.origem === 'pasta' ? '' : ` <button type="button" class="btn-just gc-tirar" data-gc-tirar="${gcEsc(i.mat)}" title="Tirar a matrícula ${gcEsc(i.mat)} da lista" aria-label="Tirar a matrícula ${gcEsc(i.mat)} da lista">✕</button>`;
+        const resumo = !d ? '<span class="gc-sub">dados na próxima análise</span>'
+            : !d.achada ? '<span class="gc-sub gc-falta">não encontrada na base</span>'
+            : `<span class="gc-sub">${gcEsc(d.nome || '')} · ${gcMes(ult[0])}: R$ ${gcN(ult[7], 2)} · ${gcM3(ult[3])} m³ · venc. ${gcEsc(ult[1] || '—')}</span>`;
+        const corpo = d && d.achada ? `<p>${gcEsc(d.cat || '')}${d.grupo ? ' · Grupo ' + gcEsc(d.grupo) : ''} · ${i.origem === 'pasta' ? 'planilha da pasta' : 'adicionada no relatório'}</p>
+            <div class="tabela-wrap"><table class="tabela-dados"><thead><tr><th>Mês</th><th>Vencimento</th><th class="num">Consumo medido (m³)</th><th class="num">Consumo faturado água (m³)</th><th class="num">Volume esgoto (m³)</th><th class="num">Faturado água (R$)</th><th class="num">Faturado esgoto (R$)</th><th class="num">Faturado total (R$)</th></tr></thead><tbody>`
+            + d.meses.map((m) => `<tr><td>${gcMes(m[0])}</td><td>${gcEsc(m[1] || '—')}</td><td class="num">${gcM3(m[2])}</td><td class="num">${gcM3(m[3])}</td><td class="num">${gcM3(m[4])}</td><td class="num">${gcN(m[5], 2)}</td><td class="num">${gcN(m[6], 2)}</td><td class="num"><b>${gcN(m[7], 2)}</b></td></tr>`).join('')
+            + '</tbody></table></div>'
+            : `<p>${d ? 'Esta matrícula não aparece na fatura de nenhum mês da pasta.' : 'Adicionada agora: os dados aparecem quando a análise estiver carregada no site (ou na próxima análise).'}</p>`;
+        return `<details class="val-aba gc-mat" data-gc-mat="${gcEsc(i.mat)}"${gcAbertas.has(i.mat) ? ' open' : ''}><summary><b>${gcEsc(i.mat)}</b> · ${gcEsc(i.tipo)} ${resumo}${tirar}</summary><div class="val-bloco">${corpo}</div></details>`;
+    }).join('') : '<p class="nota-secao">Nenhuma matrícula na lista.</p>';
+    const b = document.getElementById('gcBaixar');
+    if (b && !b.disabled) b.textContent = `⬇ GC (Excel) · ${lista.length} matrícula${lista.length === 1 ? '' : 's'}`;
+    gcBuscarDados();
+}
+document.addEventListener('toggle', (e) => {
+    const d = e.target;
+    if (d && d.classList && d.classList.contains('gc-mat')) { if (d.open) gcAbertas.add(d.dataset.gcMat); else gcAbertas.delete(d.dataset.gcMat); }
+}, true);
 function gcMsg(texto, erro) { const el = document.getElementById('gcMsg'); if (el) { el.textContent = texto; el.classList.toggle('erro', !!erro); } }
 function gcSalvar() {
     try { localStorage.setItem(LS_PREFIXO + GC_LS, JSON.stringify(gcExtras)); } catch (e) { /* ignora */ }
@@ -3404,7 +3437,7 @@ document.addEventListener('click', async (e) => {
         return;
     }
     const tirar = t.closest('[data-gc-tirar]');
-    if (tirar) { delete gcExtras[tirar.dataset.gcTirar]; gcSalvar(); gcDesenhar(); gcMsg(`Matrícula ${tirar.dataset.gcTirar} tirada da lista`); return; }
+    if (tirar) { e.preventDefault(); delete gcExtras[tirar.dataset.gcTirar]; gcSalvar(); gcDesenhar(); gcMsg(`Matrícula ${tirar.dataset.gcTirar} tirada da lista`); return; }
     if (t.id === 'gcBaixar') {
         const lista = gcLista().map((i) => ({ mat: i.mat, tipo: i.tipo }));
         if (!lista.length) { gcMsg('Adicione matrículas (ou coloque a planilha Matricula/TIPO na pasta) antes de baixar', true); return; }
