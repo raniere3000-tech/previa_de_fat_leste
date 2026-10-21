@@ -10,7 +10,7 @@ const ARQUIVOS_PY = [
   "faturamento/dre.py", "faturamento/dados.py",
   "faturamento/config.py", "faturamento/contexto.py", "faturamento/formatacao.py", "faturamento/leitura.py",
   "faturamento/origem.py", "faturamento/orcado_ciclo.py", "faturamento/previsao.py", "faturamento/projecao_grupos.py", "faturamento/validacao.py", "faturamento/painel_html.py", "faturamento/pipeline.py", "faturamento/progresso.py",
-  "faturamento/relatorio.py", "faturamento/situacao_grupo.py", "faturamento/tarifa.py", "faturamento/garantia.py", "faturamento/plano_acao.py", "faturamento/one_page.py", "faturamento/acompanhamento.py", "faturamento/situacao_lancamento.py", "faturamento/tabelas_html.py", "faturamento/top20.py",
+  "faturamento/relatorio.py", "faturamento/situacao_grupo.py", "faturamento/tarifa.py", "faturamento/garantia.py", "faturamento/plano_acao.py", "faturamento/one_page.py", "faturamento/acompanhamento.py", "faturamento/grandes_clientes.py", "faturamento/situacao_lancamento.py", "faturamento/tabelas_html.py", "faturamento/top20.py",
   "faturamento/regras.json", "faturamento/assets/relatorio.css", "faturamento/assets/relatorio.js", "faturamento/assets/tarifa.js",
 ];
 const SAIDAS = [
@@ -281,11 +281,27 @@ async function faseAcompanhamento(sup, fotos) {
   avisa("acompanhamento", { info, conteudo: bytes.buffer }, [bytes.buffer]);
 }
 
+// Excel de Grandes Clientes (botão "GC" da aba Dados): usa a análise que já está carregada aqui
+async function faseGC(lista) {
+  const pyodide = await iniciaPyodide();
+  const caminho = "/tmp/grandes_clientes.xlsx";
+  const gc = pyodide.globals.get("grandes_clientes");
+  const info = JSON.parse(gc(JSON.stringify(lista || []), caminho));
+  gc.destroy();
+  const bytes = pyodide.FS.readFile(caminho);
+  avisa("gc", { info, conteudo: bytes.buffer }, [bytes.buffer]);
+}
+
 self.onmessage = async (evento) => {
   const { fase, arquivos, ajustes } = evento.data;
   if (fase === "acompanhamento") {
     try { await faseAcompanhamento(evento.data.sup, evento.data.fotos); }
     catch (erro) { avisa("acompanhamentoErro", { motivo: String((erro && erro.message) || erro).split("\n").slice(-3).join(" ") }); }
+    return;
+  }
+  if (fase === "gc") {
+    try { await faseGC(evento.data.lista); }
+    catch (erro) { avisa("gcErro", { motivo: String((erro && erro.message) || erro).split("\n").slice(-3).join(" ") }); }
     return;
   }
   try {

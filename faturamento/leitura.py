@@ -24,7 +24,7 @@ CABECALHOS_CONHECIDOS = COLUNAS_CONSUMO | COLUNAS_FATURA | COLUNAS_CRONOGRAMA
 NOMES_CRONOGRAMA = {"GRUPO": "Grupo", "DATADALEITURA": "Data da Leitura", "DATALEITURA": "Data da Leitura",
                     "QTSDIAS": "Qts. Dias", "QTDDIAS": "Qts. Dias", "QTDEDIAS": "Qts. Dias", "QTDIAS": "Qts. Dias",
                     "QUANTIDADEDIAS": "Qts. Dias", "QUANTIDADEDEDIAS": "Qts. Dias", "DIASDELEITURA": "Qts. Dias"}
-_CHAVES_CONHECIDAS = {chave_texto(c) for c in CABECALHOS_CONHECIDOS} | set(NOMES_CRONOGRAMA)
+_CHAVES_CONHECIDAS = {chave_texto(c) for c in CABECALHOS_CONHECIDOS} | set(NOMES_CRONOGRAMA) | {"MATRICULA", "TIPO"}   # + lista GC
 
 
 def _texto_csv(caminho, limite=None):
@@ -211,6 +211,9 @@ def identifica_tipo(colunas, nome=""):
         return "fatura"
     if COLUNAS_CRONOGRAMA.issubset(colunas):
         return "cronograma"
+    from .grandes_clientes import eh_lista_gc
+    if eh_lista_gc(colunas):                       # lista de matrículas (Matricula, TIPO) para o Excel de Grandes Clientes
+        return "matriculas_gc"
     return "desconhecido"
 
 
@@ -569,6 +572,7 @@ def classifica_arquivos(pasta, progresso=None):
     resultado["orcado"] = [(c["caminho"], c["aba"]) for c in classificados if c["tipo"] == "orcado"]
     resultado["orcado_eventos"] = [(c["caminho"], c["aba"]) for c in classificados if c["tipo"] == "orcado_eventos"]
     resultado["tarifa"] = [(c["caminho"], c["aba"]) for c in classificados if c["tipo"] == "tarifa"]
+    resultado["matriculas_gc"] = [(c["caminho"], c["aba"]) for c in classificados if c["tipo"] == "matriculas_gc"]
     resultado["ignorados"] = ignorados
     print(f"📁 Consumo: {len(resultado['consumo'])} | Fatura: {len(resultado['fatura'])} | "
           f"Cronograma: {len(resultado['cronograma'])} | "

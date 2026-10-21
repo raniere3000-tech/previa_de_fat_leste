@@ -34,6 +34,16 @@ def continuar(ajustes_json):
     return _estado["sessao"].continuar(ajustes)
 
 
+def grandes_clientes(lista_json, caminho):
+    """Excel de Grandes Clientes (botão "GC" da aba Dados): grava o .xlsx em `caminho` e devolve JSON com o nome do
+    arquivo e quantas matrículas foram encontradas. `lista_json`: [{mat, tipo}] (planilha da pasta + adicionadas)."""
+    from faturamento.grandes_clientes import gera_xlsx_gc
+    conteudo, _, info = gera_xlsx_gc(_estado["sessao"].ctx, json.loads(lista_json or "[]"))
+    with open(caminho, "wb") as f:
+        f.write(conteudo)
+    return json.dumps(info, ensure_ascii=False)
+
+
 def acompanhamento(sup, fotos_json, caminho):
     """Export "Acompanhamento Mensal" (botão do site): grava o .xlsx em `caminho` e devolve JSON com o nome do arquivo
     e a "foto" do realizado acumulado das indiretas, que o site guarda no ajustes_relatorio.json para o próximo export."""

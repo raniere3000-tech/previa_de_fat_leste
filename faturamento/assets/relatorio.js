@@ -1864,7 +1864,7 @@ function marcaNuvem(nome, r) {
 // clique na nuvem: grava tudo o que está na tela e relê a pasta; devolve true se tudo foi salvo
 window.sincronizarTudo = async function () {
     if (!compartilhado()) return false;
-    const r = [await syncForecast.empurrar(), await syncSituacao.empurrar(), await syncGarantia.empurrar(), await syncPlano.empurrar(), await syncOnePage.empurrar(), await salvarJustificativas()];
+    const r = [await syncForecast.empurrar(), await syncSituacao.empurrar(), await syncGarantia.empurrar(), await syncPlano.empurrar(), await syncOnePage.empurrar(), await syncGC.empurrar(), await salvarJustificativas()];
     puxarAjustesCompartilhados(); lerJustificativasDaPasta();
     return r.every(Boolean);
 };
@@ -1931,6 +1931,7 @@ function puxarAjustesCompartilhados() {
     if (typeof syncGarantia !== 'undefined') syncGarantia.puxar();
     if (typeof syncPlano !== 'undefined') syncPlano.puxar();
     if (typeof syncOnePage !== 'undefined') syncOnePage.puxar();
+    if (typeof syncGC !== 'undefined') syncGC.puxar();
 }
 // chamado pelo site quando o arquivo da pasta mudou (outra pessoa salvou) ou ao voltar para a aba
 window.puxarTudoDaPasta = function () { puxarAjustesCompartilhados(); lerJustificativasDaPasta(); };
@@ -3342,3 +3343,90 @@ document.addEventListener('click', async function (e) {
     const sup = ESTADO.sup !== 'TODAS' ? '_' + ESTADO.sup.replace(/[^A-Za-z0-9]/g, '') : '';
     await baixarPlanilha(cols, linhas, `Cortadas_com_consumo_${b.dataset.mes}${sup}.xlsx`);
 });
+
+// ===== Aba Dados: Grandes Clientes (GC) =====
+// Lista = planilha de matrículas da pasta (gc-dados, vem do Python) + matrículas adicionadas aqui (gcExtras), que ficam
+// no ajustes_relatorio.json da pasta (seção "gc"), para todos. O Excel é gerado pelo site com a análise carregada
+// (window.parent.baixarGC): faturamento, consumo e vencimento de todos os meses da pasta.
+const GC_LS = 'faturamento_gc';
+let gcExtras = {};                                   // {matrícula: {tipo, em}}
+try { gcExtras = JSON.parse(localStorage.getItem(LS_PREFIXO + GC_LS) || '{}') || {}; } catch (e) { /* sem armazenamento */ }
+const GC_DADOS = (() => { try { return JSON.parse(document.getElementById('gc-dados').textContent); } catch (e) { return { lista: [], arquivos: [] }; } })();
+const gcEsc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const gcChave = (m) => { const d = String(m || '').replace(/\D/g, ''); return d.replace(/^0+/, '') || d; };
+function gcLista() {                                  // planilha da pasta primeiro; adicionadas que já estão nela não repetem
+    const vistos = new Set(), lista = [];
+    GC_DADOS.lista.forEach((i) => { vistos.add(i.mat); lista.push({ mat: i.mat, tipo: i.tipo, origem: 'pasta' }); });
+    Object.keys(gcExtras).forEach((m) => { if (!vistos.has(m)) { vistos.add(m); lista.push({ mat: m, tipo: gcExtras[m].tipo || 'GC', origem: 'adicionada' }); } });
+    return lista;
+}
+function gcDesenhar() {
+    const corpo = document.querySelector('#gcTabela tbody');
+    if (!corpo) return;
+    const lista = gcLista();
+    corpo.innerHTML = lista.length ? lista.map((i) => `<tr><td>${gcEsc(i.mat)}</td><td>${gcEsc(i.tipo)}</td><td>${i.origem === 'pasta'
+        ? 'Planilha da pasta' : 'Adicionada no relatório'}</td><td>${i.origem === 'pasta' ? ''
+        : `<button type="button" class="btn-just" data-gc-tirar="${gcEsc(i.mat)}" title="Tirar a matrícula ${gcEsc(i.mat)} da lista" aria-label="Tirar a matrícula ${gcEsc(i.mat)} da lista">✕</button>`}</td></tr>`).join('')
+        : '<tr><td colspan="4">Nenhuma matrícula na lista.</td></tr>';
+    const b = document.getElementById('gcBaixar');
+    if (b) b.textContent = `⬇ GC (Excel) · ${lista.length} matrícula${lista.length === 1 ? '' : 's'}`;
+}
+function gcMsg(texto, erro) { const el = document.getElementById('gcMsg'); if (el) { el.textContent = texto; el.classList.toggle('erro', !!erro); } }
+function gcSalvar() {
+    try { localStorage.setItem(LS_PREFIXO + GC_LS, JSON.stringify(gcExtras)); } catch (e) { /* ignora */ }
+    syncGC.agendar();
+}
+// Aceita matrículas soltas ou as linhas coladas do Excel (Matricula<TAB>TIPO); o cabeçalho é ignorado
+function gcAdicionar(texto, tipoPadrao) {
+    const naPasta = new Set(GC_DADOS.lista.map((i) => i.mat));
+    let novas = 0, ja = 0;
+    String(texto || '').split(/\r?\n/).forEach((linha) => {
+        const partes = linha.split(/[\t;,]/).map((p) => p.trim()).filter(Boolean);
+        partes.forEach((p, i) => {
+            if (!/^\d{4,}(\.0+)?$/.test(p)) return;
+            const m = gcChave(p.replace(/\.0+$/, ''));
+            const prox = partes[i + 1];
+            const tipo = (prox && !/^\d/.test(prox) ? prox : tipoPadrao || 'GC').toUpperCase();
+            if (naPasta.has(m) || gcExtras[m]) { ja++; return; }
+            gcExtras[m] = { tipo, em: new Date().toISOString() }; novas++;
+        });
+    });
+    if (novas) { gcSalvar(); gcDesenhar(); }
+    gcMsg(novas ? `${novas} matrícula(s) adicionada(s)` + (ja ? ` · ${ja} já estava(m) na lista` : '') : ja ? 'Essas matrículas já estão na lista' : 'Nenhuma matrícula reconhecida (use só números)', !novas && !ja);
+    return novas;
+}
+document.addEventListener('click', async (e) => {
+    const t = e.target;
+    if (!t || !t.closest) return;
+    if (t.id === 'gcAdicionar') {
+        const campo = document.getElementById('gcEntrada'), tipo = (document.getElementById('gcTipo') || {}).value;
+        if (gcAdicionar(campo.value, (tipo || 'GC').trim())) campo.value = '';
+        return;
+    }
+    const tirar = t.closest('[data-gc-tirar]');
+    if (tirar) { delete gcExtras[tirar.dataset.gcTirar]; gcSalvar(); gcDesenhar(); gcMsg(`Matrícula ${tirar.dataset.gcTirar} tirada da lista`); return; }
+    if (t.id === 'gcBaixar') {
+        const lista = gcLista().map((i) => ({ mat: i.mat, tipo: i.tipo }));
+        if (!lista.length) { gcMsg('Adicione matrículas (ou coloque a planilha Matricula/TIPO na pasta) antes de baixar', true); return; }
+        let fn = null;
+        try { fn = window.parent && window.parent !== window ? window.parent.baixarGC : null; } catch (er) { fn = null; }
+        if (typeof fn !== 'function') { gcMsg('Abra o relatório pelo site (Selecionar pasta e analisar) para baixar o Excel de GC', true); return; }
+        const texto = t.textContent; t.disabled = true; t.textContent = '⏳ Gerando…'; gcMsg('');
+        try {
+            const r = await fn(lista);
+            if (!r.ok) gcMsg('Não foi possível gerar o Excel de GC: ' + r.motivo, true);
+            else gcMsg(`Baixado: ${r.info.nome} · ${r.info.encontradas} de ${r.info.matriculas} matrícula(s) encontrada(s) na base · ${r.info.meses} mês(es)`,
+                       r.info.encontradas < r.info.matriculas);
+        } catch (er) { gcMsg('Não foi possível gerar o Excel de GC: ' + (er && er.message || er), true); }
+        finally { t.disabled = false; t.textContent = texto; gcDesenhar(); }
+    }
+});
+document.addEventListener('keydown', (e) => {
+    if (e.target && e.target.id === 'gcEntrada' && e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); document.getElementById('gcAdicionar').click(); }
+});
+var syncGC = criaSync('gc', 'Matrículas GC', () => gcExtras,
+    (m) => { gcExtras = m; try { localStorage.setItem(LS_PREFIXO + GC_LS, JSON.stringify(gcExtras)); } catch (e) {} },
+    () => gcDesenhar(),
+    () => !!(document.activeElement && document.activeElement.id === 'gcEntrada'));
+gcDesenhar();
+syncGC.puxar();
