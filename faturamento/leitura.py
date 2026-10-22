@@ -79,6 +79,8 @@ def _linha_cabecalho(df_raw):
         valores_linha = {chave_texto(v) for v in df_raw.iloc[i].tolist() if v is not None and str(v).strip()}
         if len(valores_linha & _CHAVES_CONHECIDAS) >= 2:
             return i
+        if len(colunas_de_mes([str(v).strip() for v in df_raw.iloc[i].tolist() if v is not None])) >= 3:
+            return i                               # orçado: linha com os meses (o título pode vir acima)
     return None
 
 
@@ -187,12 +189,42 @@ def padroniza_colunas_cronograma(df):
 
 MES_ABREV = {"jan": 1, "fev": 2, "mar": 3, "abr": 4, "mai": 5, "jun": 6,
              "jul": 7, "ago": 8, "set": 9, "out": 10, "nov": 11, "dez": 12}
-_RE_COL_MES = re.compile(r"^([a-zç]{3}/\d{2}|soma de \d{2}/\d{2}/\d{4})$", re.I)
+# coluna de mês do orçado: "jan/26", "janeiro/2026", "JAN-26", "01/2026", "Soma de 01/01/2026" ou a data que o Excel
+# devolve no cabeçalho ("2026-01-01 00:00:00")
+_RE_COL_MES = re.compile(r"^(soma de \d{2}/\d{2}/\d{4}|(jan|fev|mar|abr|mai|jun|jul|ago|set|out|nov|dez)[a-zç]*[/\-. ](\d{2}|\d{4})"
+                         r"|\d{2}/\d{4}|\d{2}/\d{2}/\d{4}|\d{4}-\d{2}-\d{2}( 00:00:00)?)$", re.I)
 _RE_PREFIXO_NUM = re.compile(r"^\d+(?:\.\d+)*\.?\s+")
 
 
 def colunas_de_mes(colunas):
     return [c for c in colunas if _RE_COL_MES.match(str(c).strip())]
+
+
+def _sup_do_texto(texto):
+    """SUP citada num texto (cabeçalho, aba ou nome de arquivo: "Leste", "RF2T26 Leste.xlsx"), ou None."""
+    from .config import ALIAS_SUP, REGRAS
+    k = chave_texto(texto)
+    for nome in list(REGRAS["superintendencias"]) + list(ALIAS_SUP):
+        if chave_texto(nome) in k:
+            return ALIAS_SUP.get(chave_texto(nome), nome)
+    return None
+
+
+def coluna_rubrica_orcado(colunas):
+    """Coluna com as linhas do orçado: "Rubrica"; ou, nos modelos sem ela, a primeira coluna que não é mês e cujo
+    cabeçalho é o nome de uma SUP ("Leste", no RF2T26) ou o título do RF ("RF3T | 2025"). None se não houver."""
+    colunas = list(colunas)
+    if "Rubrica" in colunas:
+        return "Rubrica"
+    meses = set(colunas_de_mes(colunas))
+    for c in colunas:
+        if c in meses or str(c).startswith("Unnamed"):
+            continue
+        k = chave_texto(c)
+        if k in ("SUP", "SUPERINTENDENCIA"):
+            continue
+        return c if (_sup_do_texto(c) or k.startswith("RF") or k in ("DESCRICAO", "CONTA", "LINHA")) else None
+    return None
 
 
 def identifica_tipo(colunas, nome=""):
@@ -201,6 +233,9 @@ def identifica_tipo(colunas, nome=""):
     if {"Sup", "Rubrica"}.issubset(colunas) and colunas_de_mes(colunas) and "EVENTO" in chave_texto(nome):
         return "orcado_eventos"
     if {"Sup", "Rubrica"}.issubset(colunas) and len(colunas_de_mes(colunas)) >= 3:
+        return "orcado"
+    # modelos sem a coluna Sup (RF1T26: "Rubrica"; RF2T26: "Leste"; RF3T: "RF3T | 2025") + um mês por coluna
+    if len(colunas_de_mes(colunas)) >= 3 and coluna_rubrica_orcado(colunas) and not COLUNAS_FATURA.issubset(colunas):
         return "orcado"
     # O serviço avulso tem as mesmas colunas da fatura (inclusive endereço e localidade),
     # então só o nome do arquivo o diferencia.
@@ -221,13 +256,14 @@ def identifica_tipo(colunas, nome=""):
 def referencia_mes(valor):
     """'ago/26', '08/2026', '15/08/2026' ou data -> 'MM/AAAA' (ou None)."""
     t = re.sub(r"^soma de\s+", "", str(valor).strip().lower())
-    m = re.match(r"^([a-zç]{3})[a-z]*[/\-. ](\d{2}|\d{4})$", t)
+    m = re.match(r"^([a-zç]{3})[a-zç]*[/\-. ](\d{2}|\d{4})$", t)
     if m and m.group(1) in MES_ABREV:
         ano = m.group(2) if len(m.group(2)) == 4 else "20" + m.group(2)
         return f"{MES_ABREV[m.group(1)]:02d}/{ano}"
     dt = pd.to_datetime(t, format="%d/%m/%Y", errors="coerce")
-    if pd.isna(dt):
-        dt = pd.to_datetime(t, format="%m/%Y", errors="coerce")
+    for formato in ("%m/%Y", "%Y-%m-%d", "%Y-%m-%d %H:%M:%S"):
+        if pd.isna(dt):
+            dt = pd.to_datetime(t, format=formato, errors="coerce")
     return None if pd.isna(dt) else dt.strftime("%m/%Y")
 
 
@@ -388,11 +424,20 @@ def _numero_orcado(v):
 
 
 def processa_orcado(caminho, aba=0):
-    """Planilha de orçado (RF / RF SUP): colunas Sup, Rubrica e um mês por coluna.
+    """Planilha de orçado (RF / RF SUP): coluna das linhas (Rubrica, ou o nome da SUP / título do RF no cabeçalho),
+    Sup (opcional) e um mês por coluna. Sem a coluna Sup, a SUP vem do cabeçalho das linhas ("Leste"), do nome da aba
+    ou do nome do arquivo; se nada disso disser, fica vazia (base.py usa a SUP da análise, quando há uma só).
     Devolve formato longo: Sup, Rubrica, Referencia (MM/AAAA), Valor."""
     print(f"   ⚙️ Processando ORÇADO: {os.path.basename(caminho)}")
     df = le_dataframe(caminho, sheet_name=aba)
     meses = colunas_de_mes(df.columns)
+    col_rub = coluna_rubrica_orcado(df.columns)
+    df = df.rename(columns={col_rub: "Rubrica"}) if col_rub and col_rub != "Rubrica" else df
+    if "Sup" not in df.columns:
+        sup = (_sup_do_texto(col_rub or "") or (_sup_do_texto(aba) if isinstance(aba, str) else None)
+               or _sup_do_texto(os.path.basename(caminho)) or "")
+        df = df.assign(Sup=sup)
+    df = df[df["Rubrica"].notna() & (df["Rubrica"].astype(str).str.strip() != "")]
     longo = df.melt(id_vars=["Sup", "Rubrica"], value_vars=meses, var_name="Mes", value_name="Valor")
     longo["Valor"] = longo["Valor"].map(_numero_orcado)
     longo = longo.dropna(subset=["Valor"])
