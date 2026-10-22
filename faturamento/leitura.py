@@ -387,6 +387,16 @@ def processa_fatura_completa(caminho):
         .astype(float)
     )
     df_filter = df[df["Rubrica"].isin(RUBRICAS_VALIDAS)].copy()
+    # Data de Vencimento vazia nas linhas de água/esgoto: usa a de outra linha da mesma ligação e mês (a fatura pode
+    # trazer o vencimento só em algumas rubricas) — Excel de Grandes Clientes
+    if "Data de Vencimento" in df.columns:
+        tem = lambda s: s.notna() & (s.astype(str).str.strip() != "")
+        falta = ~tem(df_filter["Data de Vencimento"])
+        if falta.any():
+            com = df[tem(df["Data de Vencimento"])]
+            chave = lambda d: d["N. da Ligacao"] + "|" + d["Referencia de Leitura"].astype(str)
+            venc = dict(zip(chave(com), com["Data de Vencimento"]))
+            df_filter.loc[falta, "Data de Vencimento"] = chave(df_filter[falta]).map(venc).values
     compacta_textos(df_filter)
     df_filter["Grupo"] = df_filter["Grupo"].astype(str).str.strip()
     df_filter["Referencia de Leitura"] = padroniza_referencia(df_filter["Referencia de Leitura"])
