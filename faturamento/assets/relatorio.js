@@ -38,7 +38,7 @@ function definirFiltros(parcial) {
     });
     aplicarSupNosGrupos();
     aplicarFontes();
-    cortRecalcular();
+    cortRecalcular(); cort3Recalcular();
     [['selSup', ESTADO.sup], ['selMes', ESTADO.mes], ['selRef', ESTADO.ref]].forEach(([id, v]) => {
         const el = document.getElementById(id); if (el && v) el.value = v;
     });
@@ -223,7 +223,7 @@ function filtrarPorGrupo() {
     recalcularKPIsResumo();
     refazTops();                                            // Top 100 refeito só com os grupos marcados
     sitlRecalcular();                                       // cards da Situação de lançamento
-    cortRecalcular();                                       // cortadas com consumo
+    cortRecalcular(); cort3Recalcular();                    // cortadas com consumo (mês e 3 meses)
     if (typeof garRedesenhar === 'function') garRedesenhar();   // aba Garantia (Top 1000, análise e resumo)
     if (typeof planoDesenhar === 'function') planoDesenhar();   // aba Plano de ação
     if (typeof opDesenhar === 'function') opDesenhar();         // aba One page
@@ -1089,6 +1089,19 @@ function definicaoAnalitico(tipo, ra, rn) {
             [`Conta do mínimo ${ra}`], par('Acima/Abaixo do mínimo'), ['Mudança de classe']), filtro: algum(...par('Acima/Abaixo do mínimo')),
             extra: { 'Mudança de classe': (v) => { const a = v(`Acima/Abaixo do mínimo ${rn}`), b = v(`Acima/Abaixo do mínimo ${ra}`);
                 return a && b ? (a === b ? 'Manteve' : `${a} → ${b}`) : ''; } } };
+        // cortadas com consumo: Situação Ligação cortada no mês atual e Consumo Medido > 0 (o faturado é só informação)
+        case 'cortadas': {
+            const [mAnt, mAt] = par('Consumo medido água'), cortada = (t) => /CORT/i.test(t);
+            return { nome: 'Cortadas_com_consumo', exige: mAt,
+                semColuna: 'A base de consumo deste relatório não tem a coluna Consumo Medido (ou o relatório é de uma versão anterior): atualize a análise.',
+                vazio: 'Nenhuma ligação cortada com consumo medido no mês (com os filtros da tela).',
+                cols: base.concat(['Localidade', 'Zona'], par('Grupo'), par('Situação Ligação'), par('Situação Lançamento'), par('Economias'), [mAnt, mAt],
+                    par('Consumo água'), par('Valor água'), par('Valor esgoto'), par('Acima/Abaixo do mínimo'), ['Cortada e medindo há 2 meses']),
+                filtro: (v) => cortada(v(`Situação Ligação ${ra}`)) && numBR(v(mAt)) > 0,
+                extra: { [mAt]: (v) => numBR(v(mAt)),
+                    'Cortada e medindo há 2 meses': (v) => (cortada(v(`Situação Ligação ${rn}`)) && numBR(v(mAnt)) > 0 ? 'Sim' : 'Não') },
+                ordem: mAt };
+        }
         case 'situacao': return { nome: 'Situacao_Lancamento', cols: base.concat(par('Situação Lançamento'), par('Leitura da situação'),
             par('Situação Ligação'), par('Economias'), par('Consumo água'), par('Valor total'), ['Δ valor total']),
             filtro: algum(...par('Situação Lançamento')) };
@@ -1158,14 +1171,19 @@ function definicaoAnalitico(tipo, ra, rn) {
         ordem: `${P} de consumo` };
 }
 
-document.addEventListener('click', async function (e) {
+document.addEventListener('click', function (e) {
     const b = e.target.closest && e.target.closest('.btn-detalhe');
-    if (!b) return;
+    if (b) baixaDetalhe(b);
+});
+// botão "Cortadas com consumo" do site (barra de cima): mesmo analítico, sem seta na tela
+window.baixarCortadasConsumo = () => baixaDetalhe({ dataset: { detalhe: 'cortadas' }, closest: () => null });
+async function baixaDetalhe(b) {
     try {
         const a = await lerAnalitico();
-        if (!a) return;
+        if (!a) { alert('Este relatório não tem o analítico por matrícula: atualize a análise.'); return; }
         const def = definicaoAnalitico(b.dataset.detalhe, a.ra, a.rn);
         if (!def) return;
+        if (def.exige && !a.cab.includes(def.exige)) { alert(def.semColuna); return; }
         const idx = Object.fromEntries(a.cab.map((c, i) => [c, i]));
         const bloco = b.closest('.sup-top-bloco');
         const sup = bloco ? bloco.dataset.sup : (ESTADO.sup || 'TODAS'), grupos = gruposFiltro();
@@ -1205,11 +1223,12 @@ document.addEventListener('click', async function (e) {
         const sitNome = (b.dataset.sit || b.dataset.gsit || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
             .replace(/[^A-Za-z0-9]+/g, '_').replace(/^_|_$/g, '');
         const nome = `${def.nome}${soEsg ? '_so_esgoto' : ''}${sitNome ? '_' + sitNome : ''}_${a.mes}${sup !== 'TODAS' ? '_' + sup.replace(/[^A-Za-z0-9]/g, '') : ''}${grupos ? '_grupos_filtrados' : ''}.csv`;
+        if (!linhas.length && def.vazio) { alert(def.vazio); return; }
         await baixarPlanilha(def.cols, linhas, nome);
     } catch (erro) {
         alert('Não foi possível baixar o analítico neste navegador (' + erro.message + ').');
     }
-});
+}
 
 // Situação de lançamento: botão Analítica / Sintética (vale para os quadros de todas as SUPs; lembra a última escolha)
 function sitlVisao(visao) {
@@ -2135,8 +2154,23 @@ function garVarLista(tipo) {
             && (!GAR_CAT_VAR.cats || GAR_CAT_VAR.cats.has(garCat(d))) && s * garDifVal(d) > 0)
         .sort((a, b) => s * (garDifVal(b) - garDifVal(a)));
 }
-const GAR_COLS_VAR = ['#', 'Matrícula', 'Cliente', 'Categoria', 'Localidade', 'Grupo', 'SUP', 'Econ.', 'Cons. fat. anterior (m³)',
-    'Cons. fat. atual (m³)', 'Δ cons. (m³)', 'Faturado anterior (R$)', 'Faturado atual (R$)', 'Δ R$', 'Δ %', 'Situação conta'];
+// [campo, título, tipo]: clique no título ordena a tabela (as 100 do ranking): número começa do maior, texto de A a Z;
+// o terceiro clique volta à ordem do ranking (#). Cada tabela (aumentos / quedas) tem a sua ordem.
+const GAR_COLS_VAR = [['rank', '#', 'n'], ['lig', 'Matrícula', 't'], ['nome', 'Cliente', 't'], ['cat', 'Categoria', 't'], ['loc', 'Localidade', 't'],
+    ['grupo', 'Grupo', 't'], ['sup', 'SUP', 't'], ['eco', 'Econ.', 'n'], ['cAnt', 'Cons. fat. anterior (m³)', 'n'], ['cons', 'Cons. fat. atual (m³)', 'n'],
+    ['dc', 'Δ cons. (m³)', 'n'], ['vAnt', 'Faturado anterior (R$)', 'n'], ['val', 'Faturado atual (R$)', 'n'], ['dv', 'Δ R$', 'n'], ['pv', 'Δ %', 'n'],
+    ['sit', 'Situação conta', 't']];
+GAR_VAR.ordem = { aumento: { campo: null, desc: false }, queda: { campo: null, desc: false } };
+function garVarValor(d, r, c) {
+    if (c === 'rank') return r;
+    if (c === 'eco') return garValorCol(d, 'eco');
+    if (c === 'dc') return d.cons != null && d.cAnt != null ? d.cons - d.cAnt : null;
+    if (c === 'dv') return garDifVal(d);
+    if (c === 'pv') return d.vAnt ? garDifVal(d) / d.vAnt : null;
+    if (c === 'sit') return garEmAnalise(d) ? 'Em análise' : d.sit;
+    if (c === 'grupo') return parseInt(normGrupo(d.grupo), 10) || 0;
+    return d[c];
+}
 function garDesenharVar() {
     if (!GAR.dados || !document.getElementById('garTabelaAumento')) return;
     garGrupos = gruposFiltro();
@@ -2148,7 +2182,17 @@ function garDesenharVar() {
         const lista = garVarLista(tipo), top = lista.slice(0, 100);
         const vis = top.map((d, i) => [d, i + 1]).filter(([d]) => !busca.length || busca.some((t) => String(d.lig).includes(t)));
         conta[tipo] = [vis.length, lista.length];
-        tab.tHead.innerHTML = '<tr>' + GAR_COLS_VAR.map((c, i) => `<th class="${i === 0 || i >= 7 && i <= 14 ? 'num' : ''}">${c}</th>`).join('') + '<th></th></tr>';
+        const { campo, desc } = GAR_VAR.ordem[tipo];
+        if (campo) {
+            const num = GAR_COLS_VAR.find((c) => c[0] === campo)[2] === 'n' || campo === 'grupo';
+            vis.sort(([a, ra], [b, rb]) => {
+                let x = garVarValor(a, ra, campo), y = garVarValor(b, rb, campo);
+                if (num) { x = x == null ? -Infinity : x; y = y == null ? -Infinity : y; return desc ? y - x : x - y; }
+                return desc ? String(y || '').localeCompare(String(x || '')) : String(x || '').localeCompare(String(y || ''));
+            });
+        }
+        tab.tHead.innerHTML = '<tr>' + GAR_COLS_VAR.map(([c, t, tipoC]) => `<th class="gar-ord ${tipoC === 'n' ? 'num' : ''}" data-ord-var="${c}" tabindex="0" `
+            + `title="Clique para ordenar">${t}${c === campo ? (desc ? ' ▼' : ' ▲') : ''}</th>`).join('') + '<th></th></tr>';
         tab.tBodies[0].innerHTML = vis.map(([d, r]) => {
             const dc = (d.cons != null && d.cAnt != null) ? d.cons - d.cAnt : null, dv = garDifVal(d), pv = d.vAnt ? dv / d.vAnt : null;
             const sit = d.sit ? `<span class="gar-sit ${garEmAnalise(d) ? 'gar-sit-analise' : 'gar-sit-lib'}">${garEsc(garEmAnalise(d) ? 'Em análise' : d.sit)}</span>` : '';
@@ -2179,7 +2223,19 @@ function garBaixarVar(tipo) {
         d.vAnt, d.val, r2(garDifVal(d)), pct(d.val, d.vAnt), d.mVal, d.rank && d.rank <= GAR.top ? d.rank : '']);
     baixarPlanilha(cols, linhas, `Garantia_${P}s_${GAR.ref.replace('/', '-')}${GAR_VAR.soAnalise ? '_em_analise' : ''}${GAR_CAT_VAR.cats ? '_categorias_filtradas' : ''}.csv`);
 }
+function garVarOrdenar(th) {
+    const tipo = th.closest('#garTabelaAumento') ? 'aumento' : 'queda', c = th.dataset.ordVar, o = GAR_VAR.ordem[tipo];
+    const texto = GAR_COLS_VAR.find((x) => x[0] === c)[2] === 't' && c !== 'grupo', primeiro = !texto;      // número: maior primeiro
+    GAR_VAR.ordem[tipo] = o.campo !== c ? { campo: c, desc: primeiro } : o.desc === primeiro ? { campo: c, desc: !primeiro } : { campo: null, desc: false };
+    garDesenharVar();
+}
+document.addEventListener('keydown', (e) => {
+    const th = (e.key === 'Enter' || e.key === ' ') && e.target.closest && e.target.closest('th[data-ord-var]');
+    if (th) { e.preventDefault(); garVarOrdenar(th); }
+});
 document.addEventListener('click', (e) => {
+    const th = e.target.closest && e.target.closest('th[data-ord-var]');
+    if (th) { garVarOrdenar(th); return; }
     if (e.target.id === 'garVarSoAnalise') { GAR_VAR.soAnalise = !GAR_VAR.soAnalise; garDesenharVar(); return; }
     if (e.target.id === 'garVarLimpar') { const i = document.getElementById('garVarBusca'); i.value = ''; GAR_VAR.busca = []; garDesenharVar(); i.focus(); return; }
     const b = e.target.closest && e.target.closest('[data-var-baixar]');
@@ -3331,6 +3387,63 @@ function cortRecalcular() {
     p('cort-qtd', f(qtd, 0)); p('cort-med', f(med, 1)); p('cort-val', 'R$ ' + f(val, 2)); p('cort-reinc', f(reinc, 0));
 }
 document.addEventListener('DOMContentLoaded', cortRecalcular);
+
+// Análise > Cortadas com consumo nos 3 últimos meses: resumo por combinação refeito com grupos e SUP; o clique numa
+// combinação mostra só as ligações dela (clique de novo para ver todas)
+let C3_COMBO = '';
+function cort3Recalcular() {
+    const t = document.getElementById('tabela-cortadas-3meses');
+    const res = document.getElementById('tabela-cortadas-3meses-resumo');
+    if (!t || !res) return;
+    const marcados = new Set(Array.from(document.querySelectorAll('.chk-grupo:checked')).map(c => c.value));
+    const todos = !document.querySelector('.chk-grupo');
+    const soma = {}, tot = { n: 0, cort: 0, ativ: 0, sf: 0, med: 0 };
+    t.querySelectorAll('tbody tr').forEach(tr => {
+        const ok = (todos || marcados.has(tr.dataset.grupo)) && (ESTADO.sup === 'TODAS' || tr.dataset.sup === ESTADO.sup);
+        tr.style.display = ok && (!C3_COMBO || tr.dataset.c3 === C3_COMBO) ? '' : 'none';
+        if (!ok) return;
+        const s = soma[tr.dataset.c3] || (soma[tr.dataset.c3] = { n: 0, cort: 0, ativ: 0, sf: 0, med: 0 });
+        const sit = tr.dataset.sitat === 'cortada' ? 'cort' : tr.dataset.sitat === 'ativa' ? 'ativ' : 'sf';
+        for (const x of [s, tot]) { x.n++; x[sit]++; x.med += parseFloat(tr.dataset.med) || 0; }
+    });
+    const f = (v, d) => v.toLocaleString('pt-BR', { minimumFractionDigits: d, maximumFractionDigits: d });
+    const escreve = (linha, s) => {
+        s = s || { n: 0, cort: 0, ativ: 0, sf: 0, med: 0 };
+        for (const k of ['n', 'cort', 'ativ', 'sf']) { const td = linha.querySelector('.c3-' + k); if (td) td.textContent = f(s[k], 0); }
+        const td = linha.querySelector('.c3-med'); if (td) td.textContent = f(s.med, 1);
+    };
+    res.querySelectorAll('tbody tr.c3-combo').forEach(tr => {
+        escreve(tr, soma[tr.dataset.c3]);
+        tr.classList.toggle('c3-ativa', tr.dataset.c3 === C3_COMBO);
+        tr.classList.toggle('c3-vazia', !(soma[tr.dataset.c3] || {}).n);
+    });
+    const pe = res.querySelector('tfoot tr'); if (pe) escreve(pe, tot);
+    const info = document.getElementById('c3-filtro-info');
+    if (info) {
+        const sel = res.querySelector('tr.c3-combo.c3-ativa td:nth-child(4)');
+        info.textContent = C3_COMBO && sel ? 'Mostrando só: ' + sel.textContent + ' (clique de novo na combinação para ver todas).'
+            : 'Mostrando todas as combinações.';
+    }
+}
+document.addEventListener('DOMContentLoaded', cort3Recalcular);
+document.addEventListener('click', function (e) {
+    const tr = e.target.closest && e.target.closest('#tabela-cortadas-3meses-resumo tr.c3-combo');
+    if (!tr) return;
+    C3_COMBO = C3_COMBO === tr.dataset.c3 ? '' : tr.dataset.c3;
+    cort3Recalcular();
+});
+document.addEventListener('click', async function (e) {
+    const b = e.target.closest && e.target.closest('.btn-cortadas3');
+    const t = document.getElementById('tabela-cortadas-3meses');
+    if (!b || !t) return;
+    const cols = Array.from(t.querySelectorAll('thead th')).map(th => th.textContent.trim());
+    const nums = cols.map((c, i) => /^Medido/.test(c) ? i : -1).filter(i => i >= 0);
+    const num = (s) => { const x = parseFloat(s.replace(/\./g, '').replace(',', '.')); return isNaN(x) ? s : x; };
+    const linhas = Array.from(t.querySelectorAll('tbody tr')).filter(tr => tr.style.display !== 'none')
+        .map(tr => Array.from(tr.children).map((td, i) => { const s = td.textContent.trim(); return nums.includes(i) ? num(s) : s; }));
+    const sup = ESTADO.sup !== 'TODAS' ? '_' + ESTADO.sup.replace(/[^A-Za-z0-9]/g, '') : '';
+    await baixarPlanilha(cols, linhas, `Cortadas_3_meses_${b.dataset.mes}${sup}.xlsx`);
+});
 // seta da lista: baixa as linhas visíveis (grupos e SUP filtrados); números voltam a ser números
 document.addEventListener('click', async function (e) {
     const b = e.target.closest && e.target.closest('.btn-cortadas');
@@ -3339,7 +3452,7 @@ document.addEventListener('click', async function (e) {
     const cols = Array.from(t.querySelectorAll('thead th')).map(th => th.textContent.trim());
     const num = (s) => { const x = parseFloat(s.replace('R$', '').replace(/\./g, '').replace(',', '.')); return isNaN(x) ? s : x; };
     const linhas = Array.from(t.querySelectorAll('tbody tr')).filter(tr => tr.style.display !== 'none')
-        .map(tr => Array.from(tr.children).map((td, i) => { const s = td.textContent.trim(); return [4, 5, 7, 8, 9].includes(i) ? num(s) : s; }));
+        .map(tr => Array.from(tr.children).map((td, i) => { const s = td.textContent.trim(); return [6, 7, 9, 10, 11].includes(i) ? num(s) : s; }));   // Economias, medidos, faturado e valor
     const sup = ESTADO.sup !== 'TODAS' ? '_' + ESTADO.sup.replace(/[^A-Za-z0-9]/g, '') : '';
     await baixarPlanilha(cols, linhas, `Cortadas_com_consumo_${b.dataset.mes}${sup}.xlsx`);
 });

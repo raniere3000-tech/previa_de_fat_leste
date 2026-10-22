@@ -248,6 +248,7 @@ td.num { text-align:right; }
 /* Diretas: visual mais limpo — cabeçalho claro, sem preenchimentos coloridos, só texto laranja nas quedas */
 .barra-diretas { display:flex; justify-content:flex-end; margin:8px 0 -4px; }
 :is(#view-tabelas, #view-analise).compacto .x-det { display:none; }
+:is(#view-tabelas, #view-analise).compacto .x-abs { display:none; }     /* colunas principais: só os Δ % */
 :is(#view-tabelas, #view-analise) table { border-collapse:collapse; }
 :is(#view-tabelas, #view-analise) th, :is(#view-tabelas, #view-analise) td { border:0; border-bottom:1px solid #edf1f5; padding:4px 7px; }
 :is(#view-tabelas, #view-analise) th { background:var(--marinho) !important; color:#fff; font-weight:600; border-bottom:1px solid var(--marinho); }
@@ -367,6 +368,7 @@ td.num { text-align:right; }
         -webkit-print-color-adjust:exact; print-color-adjust:exact; }
     #view-executivo .tabela-previsao td.neg, #view-executivo .tabela-dre td.neg { -webkit-print-color-adjust:exact; print-color-adjust:exact; }
     #view-executivo.compacto .x-det { display:none; }
+    #view-executivo.compacto .x-abs { display:none; }
     #view-executivo .prev-acoes, #view-executivo .btn-just, #view-executivo button, #view-executivo .barra-orcado-ciclo { display:none !important; }
     #view-executivo .tabela-wrap { overflow:visible; }
     #view-executivo h2 { font-size:11.5px; margin:0 0 4px; }
@@ -684,6 +686,13 @@ table.op-mini .num { text-align:right; }
 .tabela-cortadas { width:100%; border-collapse:collapse; font-size:12.5px; }
 .tabela-cortadas th { position:sticky; top:0; background:#1b3a5c; color:#fff; padding:6px; }
 .tabela-cortadas td { padding:4px 6px; border-bottom:1px solid #e5ebf2; text-align:center; }
+.tabela-c3 tr.c3-combo { cursor:pointer; }
+.tabela-c3 tr.c3-combo:hover td { background:#f3f7fb; }
+.tabela-c3 tr.c3-ativa td { background:#fdeee3; font-weight:700; }
+.tabela-c3 tr.c3-vazia td { color:#9aaabb; }
+.tabela-c3 td.c3-marca { color:#C2560C !important; font-size:15px; width:62px; }
+.tabela-c3 tr.c3-vazia td.c3-marca { color:#c9d3de !important; }
+.tabela-c3 tfoot td { font-weight:700; border-top:2px solid #1b3a5c; padding:5px 6px; text-align:center; }
 /* Aba Dados: cada matrícula GC é um tópico que abre (mesma cara de Avisos / Bases carregadas) */
 #gcLista .gc-mat > summary { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
 #gcLista .gc-mat > summary::before { content:"▶"; font-size:11px; }
