@@ -101,3 +101,32 @@ def test_site_e_worker_ligam_o_botao_ao_python():
     assert "def grandes_clientes(lista_json, caminho)" in executor and "def grandes_clientes_dados(lista_json)" in executor
     assert "window.dadosGC = async (lista)" in site and 'fase === "gcDados"' in worker and "window.parent.dadosGC" in rel
     assert "criaSync('gc'" in rel and "window.parent.baixarGC" in rel and "await syncGC.empurrar()" in rel
+
+
+def test_vencimento_em_outros_formatos_e_texto_que_nao_e_data():
+    import datetime
+    from faturamento.grandes_clientes import _vencimentos
+    d = datetime.date(2026, 10, 15)
+    for valor in ("15/10/2026", "15/10/26", "2026-10-15 00:00:00", "15.10.2026", "15-10-2026", "46310", "46310.0", "20261015"):
+        assert _vencimentos(pd.Series([valor, None, ""])) == d, valor
+    assert _vencimentos(pd.Series(["15/10/2026", "20/10/2026"])) == "15/10/2026, 20/10/2026"
+    assert _vencimentos(pd.Series(["A VISTA"])) == "A VISTA"          # não é data: aparece como está na fatura
+    assert _vencimentos(pd.Series([None, "", "nan"])) is None
+
+
+def test_vencimento_vazio_na_linha_de_agua_vem_de_outra_rubrica(tmp_path):
+    from faturamento.leitura import processa_fatura_completa
+    linhas = []
+    for rub, venc in (("VALOR DE AGUA", ""), ("VALOR DE ESGOTO", ""), ("DESCONTO", "15/10/2026")):
+        linhas.append({"N. da Ligacao": "100003", "Grupo": "01", "Rubrica": rub, "Valor Parcela": "10,00",
+                       "Referencia de Leitura": "15/10/2026", "Data de Vencimento": venc})
+    caminho = tmp_path / "Fatura.csv"
+    pd.DataFrame(linhas).to_csv(caminho, sep=";", index=False, encoding="utf-8-sig")
+    agua_esgoto, _ = processa_fatura_completa(str(caminho))
+    assert list(agua_esgoto["Data de Vencimento"]) == ["15/10/2026", "15/10/2026"]
+
+
+def test_lista_de_matriculas_comeca_fechada(sessao_gc):
+    html = open(sessao_gc.caminho_html, encoding="utf-8").read()
+    assert '<details class="val-aba" id="gcListaWrap"><summary id="gcListaTitulo">' in html
+    assert '<details class="val-aba" id="gcListaWrap" open' not in html

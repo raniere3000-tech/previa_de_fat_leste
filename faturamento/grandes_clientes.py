@@ -81,16 +81,29 @@ def _chave_ref(r):
     return (str(r)[3:], str(r)[:2])
 
 
+FORMATOS_VENCIMENTO = ("%d/%m/%Y", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d", "%d/%m/%Y %H:%M:%S", "%d/%m/%Y %H:%M", "%d/%m/%y",
+                       "%d.%m.%Y", "%d-%m-%Y", "%Y%m%d", "%Y/%m/%d")
+
+
 def _vencimentos(serie):
-    """Datas de vencimento distintas do mês (texto dd/mm/aaaa ou data) → data única ou texto com todas."""
+    """Datas de vencimento distintas do mês → data única ou texto com todas. Aceita dd/mm/aaaa, dd/mm/aa, aaaa-mm-dd,
+    dd.mm.aaaa, número de série do Excel (46310); o que não for data aparece como está na fatura."""
     from .leitura import converte_datas
-    datas = converte_datas(serie.dropna().astype(str).str.strip().replace("", np.nan).dropna()).dropna().unique()
-    datas = sorted(pd.Timestamp(d) for d in datas)
-    if not datas:
+    textos = pd.Series(serie.dropna().astype(str).str.strip().unique())
+    textos = textos[~textos.isin(["", "nan", "None", "NaT"])]
+    if not len(textos):
         return None
-    if len(datas) == 1:
+    dt = converte_datas(textos, FORMATOS_VENCIMENTO)
+    serial = textos.str.fullmatch(r"\d{5}(\.0+)?") & dt.isna()          # data do Excel salva como número
+    if serial.any():
+        dt[serial] = pd.Timestamp("1899-12-30") + pd.to_timedelta(textos[serial].astype(float), unit="D")
+    datas = sorted({pd.Timestamp(d) for d in dt.dropna()})
+    outros = sorted(textos[dt.isna()])
+    if not datas:
+        return ", ".join(outros)
+    if len(datas) == 1 and not outros:
         return datas[0].to_pydatetime().date()
-    return ", ".join(d.strftime("%d/%m/%Y") for d in datas)
+    return ", ".join([d.strftime("%d/%m/%Y") for d in datas] + outros)
 
 
 def monta_gc(ctx, lista):
@@ -264,7 +277,9 @@ def gera_card_gc_html(ctx):
     <button type="button" class="btn-just" id="gcAdicionar">Adicionar</button>
     <span class="gar-msg" id="gcMsg" role="status"></span>
   </div>
-  <div id="gcLista"></div>
+  <p class="nota-secao">A lista fica fechada: clique em <b>Matrículas da lista</b> para ver as ligações.</p>
+  <details class="val-aba" id="gcListaWrap"><summary id="gcListaTitulo">Matrículas da lista</summary>
+    <div class="val-bloco"><div id="gcLista"></div></div></details>
 </div>
 <script type="application/json" id="gc-dados">{dados}</script>
 """

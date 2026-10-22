@@ -3509,6 +3509,8 @@ function gcDesenhar() {
             : `<p>${d ? 'Esta matrícula não aparece na fatura de nenhum mês da pasta.' : 'Adicionada agora: os dados aparecem quando a análise estiver carregada no site (ou na próxima análise).'}</p>`;
         return `<details class="val-aba gc-mat" data-gc-mat="${gcEsc(i.mat)}"${gcAbertas.has(i.mat) ? ' open' : ''}><summary><b>${gcEsc(i.mat)}</b> · ${gcEsc(i.tipo)} ${resumo}${tirar}</summary><div class="val-bloco">${corpo}</div></details>`;
     }).join('') : '<p class="nota-secao">Nenhuma matrícula na lista.</p>';
+    const tit = document.getElementById('gcListaTitulo');      // a lista fica fechada (oculta) até clicar
+    if (tit) tit.textContent = `Matrículas da lista (${lista.length})`;
     const b = document.getElementById('gcBaixar');
     if (b && !b.disabled) b.textContent = `⬇ GC (Excel) · ${lista.length} matrícula${lista.length === 1 ? '' : 's'}`;
     gcBuscarDados();
