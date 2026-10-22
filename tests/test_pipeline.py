@@ -314,6 +314,7 @@ def test_armazenamento_do_navegador_separado_por_site():
     rel = open(os.path.join(raiz, "faturamento", "assets", "relatorio.js"), encoding="utf-8").read()
     assert 'const ESCOPO = "previa_de_fat_leste";' in site and 'indexedDB.open(ESCOPO + ":faturamento", 1)' in site
     assert '"&escopo=" + encodeURIComponent(ESCOPO)' in site and 'searchParams.get("escopo")' in worker
+    assert 'const PICKER_LS = ESCOPO + ":faturamento_picker_seguro";' in site and '{ id: ESCOPO, mode: "read" }' in site
     assert rel.count("localStorage.getItem(") == rel.count("localStorage.getItem(LS_PREFIXO + ")
     assert rel.count("localStorage.setItem(") == rel.count("localStorage.setItem(LS_PREFIXO + ")
 
@@ -346,6 +347,39 @@ def test_cortadas_com_consumo(analise):
     assert set(d["N. Ligação"]) == set(med[med > 0].index)
     html_rel = lê_html(analise)
     assert 'id="tabela-cortadas-consumo"' in html_rel and "function cortRecalcular" in html_rel
+    # zona ("Nome da Zona" na fatura vira "Zona") e localidade na tabela, no Excel dela e no analítico do botão
+    assert d["Zona"].notna().all() and (d["Zona"].astype(str) == "ZONA " + d["Grupo"].astype(str)).all()
+    assert "<th>Localidade</th><th>Zona</th>" in html_rel and "base.concat(['Localidade', 'Zona']" in html_rel
+    an = analise.ctx.resultados["analitico"]
+    assert {"Localidade", "Zona"} <= set(an.columns)
+
+
+def test_cortadas_3_meses(tmp_path):
+    """Combinações de meses (m-2, m-1, atual) em que cada ligação apareceu cortada com Consumo Medido > 0."""
+    from faturamento.analitico import _norm_situacao
+    from faturamento.cortadas_consumo import refs_3meses
+    destino = tmp_path / "dados"
+    gera_pasta(str(destino), n_ligacoes=150, n_grupos=4, n_meses=3)
+    sessao = Sessao(str(destino), progresso=lambda pct, desc: None)
+    sessao.preparar()
+    sessao.continuar()
+    ctx = sessao.ctx
+    refs = refs_3meses(ctx)
+    assert refs == ["07/2026", "08/2026", "09/2026"]
+    d = ctx.resultados["cortadas_3meses"]
+    assert len(d) and (d["Chave"].str.len() == 3).all() and (d["Chave"] != "000").all()
+    b = ctx.base_final
+    for k, r in enumerate(refs):                               # a marca de cada mês confere com a base
+        ag = b[(b["Referencia de Leitura"] == r) & (b["__serv"] == "A")]
+        cort = ag[ag["Situacao Ligacao"].map(_norm_situacao) == "Cortada"]
+        med = pd.to_numeric(cort["Consumo Medido"], errors="coerce").fillna(0).groupby(cort["N. Ligação"].astype(str).str.strip()).sum()
+        assert set(d.loc[d["Chave"].str[k] == "1", "N. Ligação"]) == set(med[med > 0].index)
+    um = d[d["Chave"] == "110"]
+    assert (um["Combinação"] == "07/2026 + 08/2026").all()
+    assert (d.loc[d["Chave"] == "100", "Combinação"] == "Só 07/2026").all()
+    html_rel = lê_html(sessao)
+    assert 'id="tabela-cortadas-3meses"' in html_rel and "function cort3Recalcular" in html_rel
+    assert html_rel.count('class="c3-combo"') == 7
 
 
 def test_cortadas_usa_so_o_consumo_medido(analise):
@@ -361,3 +395,19 @@ def test_cortadas_usa_so_o_consumo_medido(analise):
         assert monta_cortadas_consumo(ctx).empty          # faturado > 0 com medido 0 não entra
     finally:
         ctx.base_final = original
+
+
+def test_botao_cortadas_com_consumo_usa_o_analitico(analise):
+    from faturamento.analitico import _norm_situacao
+    ctx = analise.ctx
+    ra = ctx.ref_atual
+    d = ctx.resultados["analitico"]
+    assert f"Consumo medido água {ra}" in d.columns and f"Consumo medido água {ctx.ref_anterior}" in d.columns
+    # mesmo critério da lista da aba Análise: cortada no mês atual e Consumo Medido > 0
+    sel = d[(d[f"Situação Ligação {ra}"].map(lambda s: _norm_situacao(s) if pd.notna(s) else "") == "Cortada")
+            & (d[f"Consumo medido água {ra}"].fillna(0) > 0)]
+    assert set(sel["N. Ligação"]) == set(ctx.resultados["cortadas_consumo"]["N. Ligação"])
+    html_rel = lê_html(analise)
+    assert "window.baixarCortadasConsumo" in html_rel and "case 'cortadas'" in html_rel
+    site = open(os.path.join(os.path.dirname(__file__), "..", "index.html"), encoding="utf-8").read()
+    assert 'id="btnCortadas"' in site and "w.baixarCortadasConsumo()" in site

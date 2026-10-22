@@ -35,7 +35,7 @@ def _por_mes(ctx, ref):
         return pd.DataFrame()
     # dados descritivos da linha de água (a primeira, se houver mais de uma)
     cols = [c for c in ("Grupo", "Nome Cliente", "Categoria", "Situacao Ligacao", "Situacao Lancamento", "__sup",
-                        "Economias_Totais") if c in agua.columns]
+                        "Economias_Totais", "Nome da Localidade", "Zona") if c in agua.columns]
     desc = agua[cols].assign(__lig=lig[a].values).drop_duplicates("__lig").set_index("__lig")
     mn = classifica_minimo(agua.assign(**{"Consumo Faturado": consumo[a]}))
     mn = mn.assign(__lig=lig[a].values).drop_duplicates("__lig").set_index("__lig")
@@ -46,6 +46,9 @@ def _por_mes(ctx, ref):
     out["linhas_agua"] = lig[a].value_counts()
     out["consumo_agua"] = consumo[a].groupby(lig[a].values).sum()
     out["valor_agua"] = valor[a].groupby(lig[a].values).sum()
+    if "Consumo Medido" in b.columns:                        # cortadas com consumo: a referência é só a medição
+        medido = pd.to_numeric(b["Consumo Medido"], errors="coerce").fillna(0)
+        out["medido_agua"] = medido[a].groupby(lig[a].values).sum()
     e = serv == "E"
     # economias faturadas = mesma regra do Comparativo das Diretas: economias das linhas com Consumo Faturado > 0
     eco = pd.to_numeric(b["Economias_Totais"], errors="coerce").fillna(0) if "Economias_Totais" in b.columns else consumo * 0
@@ -74,6 +77,8 @@ def monta_analitico(ctx):
     d["Nome Cliente"] = pega("Nome Cliente")
     d["Categoria"] = pega("Categoria")
     d["Superintendência"] = pega("__sup")
+    d["Localidade"] = pega("Nome da Localidade")
+    d["Zona"] = pega("Zona")
     g_at = at["Grupo"].astype(object).where(at["Grupo"].notna()) if "Grupo" in at.columns else pd.Series(np.nan, index=ligs)
     g_an = an["Grupo"].astype(object).where(an["Grupo"].notna()) if "Grupo" in an.columns else pd.Series(np.nan, index=ligs)
     d["Grupo"] = g_at.combine_first(g_an)                                   # para o filtro de grupos do relatório
@@ -99,6 +104,8 @@ def monta_analitico(ctx):
         d[f"Economias {ref}"] = x["Economias_Totais"] if "Economias_Totais" in x.columns else np.nan
     for ref, x in ((rn, an), (ra, at)):
         d[f"Consumo água {ref}"] = x.get("consumo_agua")
+    for ref, x in ((rn, an), (ra, at)):
+        d[f"Consumo medido água {ref}"] = x.get("medido_agua")
     d["Δ consumo água"] = d[f"Consumo água {ra}"] - d[f"Consumo água {rn}"]
     d["Δ % consumo água"] = (d["Δ consumo água"] / d[f"Consumo água {rn}"].where(d[f"Consumo água {rn}"] > 0)) * 100
     for ref, x in ((rn, an), (ra, at)):
