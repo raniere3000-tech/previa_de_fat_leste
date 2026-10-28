@@ -11,7 +11,7 @@ import numpy as np
 import pandas as pd
 
 from . import cache_arquivos
-from .config import (COLUNAS_CONSUMO, COLUNAS_CRONOGRAMA, COLUNAS_ECONOMIA_TODAS, COLUNAS_FATURA,
+from .config import (COLUNAS_CONSUMO, COLUNAS_CRONOGRAMA, COLUNAS_CRONOGRAMA_MIN, COLUNAS_ECONOMIA_TODAS, COLUNAS_FATURA,
                      NOMES_LIGACAO, NOMES_SAIDA_LEGADOS, NOME_RELATORIO_HTML,
                      NOME_TOP100_XLSX, RUBRICAS_VALIDAS, CHAVES_CANCELAMENTO,
                      CLASSE_INDIRETA_POR_RUBRICA, chave_texto)
@@ -245,7 +245,7 @@ def identifica_tipo(colunas, nome=""):
         return "consumo"
     if COLUNAS_FATURA.issubset(colunas):
         return "fatura"
-    if COLUNAS_CRONOGRAMA.issubset(colunas):
+    if COLUNAS_CRONOGRAMA_MIN.issubset(colunas):     # com ou sem Qts. Dias (ex.: Grupo, Localidade, Rio 01, Total Lig., Data da Leitura)
         return "cronograma"
     from .grandes_clientes import eh_lista_gc
     if eh_lista_gc(colunas):                       # lista de matrículas (Matricula, TIPO) para o Excel de Grandes Clientes
@@ -476,23 +476,34 @@ def processa_cronograma(caminho):
             except Exception as exc:
                 print(f"   ⚠️ Aba '{aba}' de {nome} ignorada ({exc}).")
                 continue
-            if df is not None and COLUNAS_CRONOGRAMA.issubset(set(df.columns)):
+            if df is not None and COLUNAS_CRONOGRAMA_MIN.issubset(set(df.columns)):
                 df["Aba/Mês Cronograma"] = str(aba)
                 frames.append(df)
     else:
         df = le_dataframe(caminho)
-        if df is not None and COLUNAS_CRONOGRAMA.issubset(set(df.columns)):
+        if df is not None and COLUNAS_CRONOGRAMA_MIN.issubset(set(df.columns)):
             df["Aba/Mês Cronograma"] = nome
             frames.append(df)
     if not frames:
-        print(f"   ⚠️ {nome}: nenhuma aba com as colunas Grupo, Data da Leitura e Qts. Dias.")
+        print(f"   ⚠️ {nome}: nenhuma aba com as colunas Grupo e Data da Leitura.")
         return pd.DataFrame(columns=["Grupo", "Data da Leitura", "Qts. Dias", "Aba/Mês Cronograma", "Referencia Cronograma", "Localidade"])
     df_final = pd.concat(frames, ignore_index=True)
+    if "Qts. Dias" not in df_final.columns:
+        df_final["Qts. Dias"] = np.nan
     df_final["Grupo"] = df_final["Grupo"].astype(str).str.strip()
     df_final = df_final[df_final["Grupo"] != ""]
     df_final["Grupo"] = df_final["Grupo"].map(chave_grupo)
     df_final["Qts. Dias"] = pd.to_numeric(df_final["Qts. Dias"].astype(str).str.replace(",", ".", regex=False), errors="coerce")
     df_final = df_final[df_final["Grupo"].str.fullmatch(r"\d+") | df_final["Qts. Dias"].notna()]   # tira linhas de título/total
+    # sem Qts. Dias (ou vazio): dias = Data da Leitura do mês − Data da Leitura anterior do mesmo grupo
+    falta = df_final["Qts. Dias"].isna()
+    if falta.any():
+        dt = converte_datas(df_final["Data da Leitura"])
+        u = pd.DataFrame({"g": df_final["Grupo"].values, "d": dt.values}).dropna().drop_duplicates().sort_values(["g", "d"])
+        u["dias"] = u.groupby("g")["d"].diff().dt.days
+        dias = dict(zip(zip(u["g"], u["d"]), u["dias"]))
+        calc = pd.Series([dias.get((g, d)) for g, d in zip(df_final["Grupo"], dt)], index=df_final.index, dtype=float)
+        df_final["Qts. Dias"] = df_final["Qts. Dias"].where(~falta, calc.where(calc > 0))
     # mês da leitura: permite cruzar o cronograma com a fatura por grupo E mês (dias de leitura de cada mês)
     df_final["Referencia Cronograma"] = padroniza_referencia(df_final["Data da Leitura"])
     # cidade do grupo (coluna Localidade): define a superintendência de cada grupo (Interior, Leste...)
