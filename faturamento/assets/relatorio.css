@@ -234,6 +234,7 @@ td.num { text-align:right; }
 
 /* Previsão de fechamento */
 .prev-titulo { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+.prev-titulo .btn-avulso-dl { margin-right:auto; }      /* a seta fica logo depois do título; os botões do forecast vão para a direita */
 .prev-acoes { display:inline-flex; gap:6px; }
 .prev-acoes .btn-just { margin-left:0; padding:4px 10px; font-size:12px; }
 .tabela-previsao tbody tr td.prev-edit { background:#FFF8E1; cursor:text; outline:1px dashed #E0C070; outline-offset:-2px; }
@@ -331,7 +332,7 @@ td.num { text-align:right; }
 .val-filtro::before { content:"Filtro: "; font-weight:600; color:var(--marinho); }
 .btn-baixar-base { margin-left:0; padding:2px 9px; font-size:13px; line-height:20px; }
 .nome-base { font-weight:600; margin:0 4px; }
-.btn-detalhe { margin-left:0; padding:2px 8px; font-size:13px; line-height:20px; letter-spacing:-1px; }   /* ⬇≡ analítico por matrícula */
+.btn-detalhe, .btn-avulso-dl { margin-left:0; padding:2px 8px; font-size:13px; line-height:20px; letter-spacing:-1px; }   /* ⬇≡ analítico por matrícula */
 @media print { .btn-detalhe { display:none !important; } }
 
 /* Indiretas: duas tabelas (água / esgoto e total) com forecast editável; gráfico de evolução embaixo, largura inteira */
@@ -541,6 +542,14 @@ td.pl-vencido { color:#9C0006; font-weight:700; } .pl-vencido-txt { color:#9C000
 #view-executivo.exec-celular .jg-tit { font-size:14px; }
 #view-executivo.exec-celular .jg-txt { font-size:13px; line-height:1.5; }
 #view-executivo .exec-just-bloco .jg { margin:4px 0; break-inside:avoid; }
+/* Executivo A4: análises de ciclo mais enxutas (letra um pouco menor, sem a moldura extra em volta de cada grupo) */
+#view-executivo:not(.exec-celular) .exec-just-bloco.exec-item { padding:0 !important; border:none !important; margin:2px 0 !important; }
+#view-executivo:not(.exec-celular) .exec-just-bloco .jg { margin:2px 0; }
+#view-executivo:not(.exec-celular) .jg-tit { font-size:12px; padding:3px 10px; }
+#view-executivo:not(.exec-celular) .jg-tit small { font-size:10.5px; }
+#view-executivo:not(.exec-celular) .jg-col { font-size:11.5px; line-height:1.42; padding:4px 10px 6px; }
+#view-executivo:not(.exec-celular) .jg-rot { font-size:9.5px; padding:0 7px; margin-bottom:2px; }
+#view-executivo:not(.exec-celular) .jg-txt p { margin:0 0 3px; }
 
 /* Garantia › Top 1000: filtro de categoria (lista com caixas, no estilo do filtro de grupos do cabeçalho) */
 .gar-dd { position:relative; display:inline-flex; align-items:center; border:1px solid var(--linha); border-radius:8px; background:#fff; }
@@ -693,6 +702,40 @@ table.op-mini .num { text-align:right; }
 .tabela-c3 td.c3-marca { color:#C2560C !important; font-size:15px; width:62px; }
 .tabela-c3 tr.c3-vazia td.c3-marca { color:#c9d3de !important; }
 .tabela-c3 tfoot td { font-weight:700; border-top:2px solid #1b3a5c; padding:5px 6px; text-align:center; }
+
+/* Garantia › O.S.: histórico das já marcadas como realizadas (recolhido) */
+.gar-os-hist { margin-top:12px; }
+.gar-os-hist > summary { cursor:pointer; font-weight:600; color:var(--marinho); font-size:13px; }
+.gar-os-hist[open] > summary { margin-bottom:8px; }
+
+/* Controle de O.S.: situação (Realizada / EXOC / Retramitada) e Obs.: */
+.gar-os-sit { max-width:210px; }
+.gar-os-obs-td { min-width:180px; }
+.gar-os-obs { width:100%; min-width:160px; }
+.gar-os-retram { display:block; color:#9a3412; font-size:10.5px; }
+/* Análise de Garantia: tabela inteira na tela, sem rolagem lateral (títulos e textos quebram linha, campos mais estreitos) */
+#garTabelaAnalise { font-size:11px; }
+#garTabelaAnalise th, #garTabelaAnalise th[data-ord-an] { white-space:normal; padding:5px 4px; font-size:10.5px; line-height:1.2; vertical-align:bottom; }
+#garTabelaAnalise td { padding:3px 4px; }
+#garTabelaAnalise td:first-child, #garTabelaAnalise td:nth-child(3), #garTabelaAnalise td:nth-child(4) { white-space:normal; }
+#garTabelaAnalise td.gar-cli { white-space:normal; max-width:170px; min-width:110px; line-height:1.25; }
+#garTabelaAnalise .gar-in { font-size:11px; padding:2px 3px; }
+#garTabelaAnalise .gar-media { width:54px; }
+#garTabelaAnalise .gar-texto { width:100%; min-width:110px; }
+#garTabelaAnalise select.gar-in { max-width:118px; }
+#garTabelaAnalise .gar-os-num { width:84px; }
+#garTabelaAnalise .gar-sit { font-size:10px; }
+#garTabelaAnalise .gar-hist { margin-left:0; }
+/* meta 🎯 em "Realizado + Forecast" (o forecast é calculado: meta − realizado) e ↺ de cada linha */
+.tabela-previsao tbody tr td.prev-meta-edit { cursor:text; }
+.tabela-previsao tbody tr td.prev-meta-edit:hover { outline:1px dashed #9DB7D5; outline-offset:-2px; }
+.tabela-previsao tbody tr td.prev-meta-edit:focus { background:#FFFFFF; outline:2px solid var(--azul-claro); }
+.tabela-previsao tbody tr td.prev-meta-edit.com-meta { background:#E3F0FF; font-weight:700; }
+.tabela-previsao tbody tr td.prev-meta-edit.com-meta::before { content:'🎯 '; font-size:11px; }
+.tabela-previsao tbody tr td.prev-meta-edit.com-meta:focus::before { content:''; }
+.btn-prev-linha { margin-left:6px; border:1px solid #C9D3E0; background:#fff; color:#1F4E79; border-radius:4px; cursor:pointer; font-size:11px; line-height:1; padding:1px 5px; vertical-align:middle; }
+.btn-prev-linha:hover { background:#EEF4FB; }
+@media print { .btn-prev-linha { display:none !important; } }
 /* Aba Dados: cada matrícula GC é um tópico que abre (mesma cara de Avisos / Bases carregadas) */
 #gcLista .gc-mat > summary { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
 #gcLista .gc-mat > summary::before { content:"▶"; font-size:11px; }

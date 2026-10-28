@@ -1177,6 +1177,73 @@ document.addEventListener('click', function (e) {
 });
 // botão "Cortadas com consumo" do site (barra de cima): mesmo analítico, sem seta na tela
 window.baixarCortadasConsumo = () => baixaDetalhe({ dataset: { detalhe: 'cortadas' }, closest: () => null });
+
+// ===== Analítico do serviço avulso (seta ⬇≡ dos quadros de Indiretas): os lançamentos daquele mês e SUP =====
+document.addEventListener('click', async (e) => {
+    const b = e.target.closest && e.target.closest('.btn-avulso-dl');
+    if (!b) return;
+    const el = document.getElementById('avulso-dl');
+    if (!el) { alert('Este relatório não tem o analítico do serviço avulso: atualize a análise.'); return; }
+    try {
+        const { cab, linhas } = lerCsvTexto(new TextDecoder('utf-8').decode(await bytesEmbutidos(el)));
+        const iRef = cab.indexOf('Referência'), iSup = cab.indexOf('Superintendência'), ref = b.dataset.ref, sup = b.dataset.sup || 'TODAS';
+        const sel = linhas.filter((l) => l[iRef] === ref && (sup === 'TODAS' || l[iSup] === sup));
+        await baixarPlanilha(cab, sel, `Servico_avulso_${sup.replace(/[^A-Za-z0-9]/g, '')}_${ref.replace('/', '-')}.xlsx`);
+    } catch (erro) {
+        alert('Não foi possível baixar o analítico do serviço avulso (' + erro.message + ').');
+    }
+});
+
+// ===== Bases analíticas (botão "Bases analíticas ▾" da aba Dados, no site) =====
+// "completa-atual" / "completa-anterior": uma linha por matrícula no mês, com os dados da matrícula, consumo medido de água,
+// consumo faturado de água e de esgoto (quem fatura esgoto tem o mesmo consumo da água) e faturamento água, esgoto e total.
+// Vem do analítico embutido (os dois meses lado a lado) + base da Garantia (rota, economias por tipo, situação da conta).
+// Segue os filtros da tela: Superintendência e grupos (o grupo da matrícula naquele mês).
+async function baixarBaseAnalitica(tipo) {
+    try {
+        const a = await lerAnalitico();
+        if (!a) { alert('Este relatório não tem o analítico por matrícula.'); return; }
+        const atual = tipo !== 'completa-anterior', ref = atual ? a.ra : a.rn;
+        if (document.getElementById('garantia-dados')) await garCarregar();
+        const idx = Object.fromEntries(a.cab.map((c, i) => [c, i]));
+        const sup = ESTADO.sup || 'TODAS', grupos = gruposFiltro();
+        const lig = (v) => String(v == null ? '' : v).trim().replace(/\.0+$/, '');
+        const cad = atual ? '' : ' (cadastro atual)';
+        const cols = ['Matrícula', 'Cliente', 'Categoria', 'Superintendência', 'Localidade', 'Zona', 'Grupo', 'Rota' + cad,
+            'Situação ligação', 'Situação lançamento'].concat(atual ? ['Situação conta'] : [], [
+            'Econ. residencial' + cad, 'Econ. comercial' + cad, 'Econ. industrial' + cad, 'Econ. pública' + cad, 'Economias',
+            'Economias faturadas água', 'Economias faturadas esgoto', 'Tipo de faturamento',
+            'Consumo medido água (m³)', 'Consumo faturado água (m³)', 'Consumo faturado esgoto (m³)',
+            'Faturamento água (R$)', 'Faturamento esgoto (R$)', 'Faturamento total (R$)']);
+        // situação da ligação sem o código antes do hífen, em maiúsculas e sem acento ("A-Ativa" → "ATIVA")
+        const sitLig = (t) => String(t || '').trim().replace(/^[A-Za-z0-9]{1,3}\s*-\s*/, '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase();
+        const linhas = [];
+        a.linhas.forEach((l) => {
+            const v = (c) => (idx[c] === undefined ? '' : (l[idx[c]] || '')), n = (c) => numBR(v(c));
+            const grupo = v(`Grupo ${ref}`), vA = n(`Valor água ${ref}`), vE = n(`Valor esgoto ${ref}`);
+            const cA = n(`Consumo água ${ref}`), med = n(`Consumo medido água ${ref}`), eA = n(`Economias faturadas água ${ref}`), eE = n(`Economias faturadas esgoto ${ref}`);
+            if (!grupo && vA == null && vE == null && cA == null && med == null) return;          // a matrícula não está neste mês
+            if (sup !== 'TODAS' && v('Superintendência') !== sup) return;
+            if (grupos && !(grupo && grupos.has(normGrupo(grupo)))) return;
+            const fatEsg = !!(vE || eE);
+            let cE = n(`Consumo esgoto ${ref}`);
+            if (fatEsg && !cE && cA) cE = cA;                                // quem fatura esgoto tem o consumo da água
+            const g = GAR.porLig && GAR.porLig.get(lig(v('N. Ligação')));
+            const r2 = (x) => (x == null || isNaN(x) ? null : Math.round(x * 100) / 100);
+            linhas.push([v('N. Ligação'), v('Nome Cliente'), v('Categoria'), v('Superintendência'), v('Localidade'), v('Zona'), grupo,
+                g ? g.rota : '', sitLig(v(`Situação Ligação ${ref}`)), v(`Situação Lançamento ${ref}`)].concat(atual ? [g ? (g.sit || '') : ''] : [], [
+                g ? g.res : null, g ? g.com : null, g ? g.ind : null, g ? g.pub : null, n(`Economias ${ref}`), eA, eE,
+                fatEsg ? (vA == null && cA == null && !eA ? 'ESGOTO' : 'AGUA E ESGOTO') : 'AGUA',
+                r2(med), r2(cA), fatEsg ? r2(cE) : null, r2(vA), r2(vE), (vA == null && vE == null) ? null : r2((vA || 0) + (vE || 0))]));
+        });
+        linhas.sort((x, y) => (parseInt(normGrupo(x[6]), 10) || 0) - (parseInt(normGrupo(y[6]), 10) || 0) || String(x[0]).localeCompare(String(y[0])));
+        const mes = ref.replace('/', '-');
+        await baixarPlanilha(cols, linhas, `Base_completa_matriculas_${mes}${sup !== 'TODAS' ? '_' + sup.replace(/[^A-Za-z0-9]/g, '') : ''}${grupos ? '_grupos_filtrados' : ''}.xlsx`);
+    } catch (erro) {
+        alert('Não foi possível montar a base neste navegador (' + erro.message + ').');
+    }
+}
+window.baixarBaseAnalitica = baixarBaseAnalitica;
 async function baixaDetalhe(b) {
     try {
         const a = await lerAnalitico();
@@ -1336,14 +1403,18 @@ function prevLer(txt) {                       // "1.234,56", "R$ (1.234)", "1234
 }
 const prevAttr = (el, a) => { const v = el.getAttribute(a); return v === null || v === '' ? null : parseFloat(v); };
 const prevChave = (tab, k) => `${tab.dataset.mes}|${tab.dataset.prev}|${k}`;
+// Meta 🎯: digitada em "Realizado + Forecast". Fica guardada a meta (não o forecast): a cada leitura nova o forecast vira
+// meta − realizado do dia, e o fechamento continua no valor do plano de ação. Mesma chave da linha + "|meta".
+const prevChaveMeta = (tab, k) => prevChave(tab, k) + '|meta';
+const prevEditavel = (tab) => !!tab.closest('#view-forecast, #view-indiretas');     // não nos clones (Executivo, prints)
 
 function prevRecalcular(tab) {
     const linha = k => tab.querySelector(`tr[data-k="${k}"]`);
     const FC = {}, C = {};                       // FC: forecast (editável) · C: realizado + forecast
     PREV_BASICAS.forEach(k => {
         const tr = linha(k); if (!tr) return;
-        const ed = prevEdicoes[prevChave(tab, k)], real = prevAttr(tr, 'data-real');
-        FC[k] = ed !== undefined ? ed : prevAttr(tr, 'data-auto');
+        const ed = prevEdicoes[prevChave(tab, k)], meta = prevEdicoes[prevChaveMeta(tab, k)], real = prevAttr(tr, 'data-real');
+        FC[k] = meta !== undefined ? meta - (real || 0) : ed !== undefined ? ed : prevAttr(tr, 'data-auto');
         C[k] = (real == null && FC[k] == null) ? null : (real || 0) + (FC[k] || 0);
     });
     const soma = (o, ks) => ks.some(k => o[k] != null) ? ks.reduce((a, k) => a + (o[k] || 0), 0) : null;
@@ -1360,8 +1431,25 @@ function prevRecalcular(tab) {
         const k = tr.dataset.k, formato = tr.dataset.fmt, v = C[k] === undefined ? null : C[k];
         const cel = tr.querySelector('.p-prev');
         if (cel && document.activeElement !== cel) cel.textContent = prevFmt(FC[k] === undefined ? null : FC[k], formato);
-        if (cel) cel.classList.toggle('editado', prevEdicoes[prevChave(tab, k)] !== undefined);
-        const fech = tr.querySelector('.p-fech'); if (fech) fech.textContent = prevFmt(v, formato);
+        const temMeta = prevEdicoes[prevChaveMeta(tab, k)] !== undefined, mexida = temMeta || prevEdicoes[prevChave(tab, k)] !== undefined;
+        if (cel) cel.classList.toggle('editado', mexida);
+        const fech = tr.querySelector('.p-fech');
+        if (fech && document.activeElement !== fech) fech.textContent = prevFmt(v, formato);
+        if (fech && cel && cel.classList.contains('prev-edit') && prevEditavel(tab)) {
+            if (!fech.classList.contains('prev-meta-edit')) {
+                fech.classList.add('prev-meta-edit'); fech.dataset.k = k;
+                fech.setAttribute('contenteditable', 'true'); fech.setAttribute('spellcheck', 'false');
+            }
+            fech.classList.toggle('com-meta', temMeta);
+            fech.title = temMeta ? `Meta 🎯 ${prevFmt(prevEdicoes[prevChaveMeta(tab, k)], formato)}: o forecast acompanha o realizado para fechar nela. Apague o valor para soltar a meta.`
+                                 : 'Digite o valor que quer fechar (meta 🎯): o forecast é calculado sozinho (meta − realizado)';
+            const rot = tr.querySelector('.dre-rotulo');
+            let b = rot && rot.querySelector('.btn-prev-linha');
+            if (mexida && rot && !b) {
+                b = document.createElement('button'); b.type = 'button'; b.className = 'btn-prev-linha'; b.textContent = '↺';
+                b.title = 'Restaurar o forecast automático só desta linha'; b.setAttribute('aria-label', b.title); rot.appendChild(b);
+            } else if (!mexida && b) b.remove();
+        }
         const neg = (x) => x !== null && x < -0.0005 && tr.dataset.canc !== '1';
         tr.querySelectorAll('.p-dorc').forEach(el => {
             const base = prevAttr(el, 'data-orc'), pct = (v != null && base) ? v / base - 1 : null;
@@ -1381,22 +1469,37 @@ function prevRecalcularTodas() {
     document.dispatchEvent(new Event('forecast-recalculado'));       // o One page refaz a tendência com o forecast novo
 }
 
+// valores da linha agora: forecast (com meta, meta − realizado) e fechamento (realizado + forecast)
+function prevLinhaAgora(tab, tr, k) {
+    const ed = prevEdicoes[prevChave(tab, k)], meta = prevEdicoes[prevChaveMeta(tab, k)], real = prevAttr(tr, 'data-real');
+    const fc = meta !== undefined ? meta - (real || 0) : ed !== undefined ? ed : prevAttr(tr, 'data-auto');
+    return { real, fc, meta, fech: meta !== undefined ? meta : (real == null && fc == null) ? null : (real || 0) + (fc || 0) };
+}
 document.addEventListener('focusin', e => {
-    const cel = e.target.closest && e.target.closest('.prev-edit'); if (!cel) return;
-    const tab = cel.closest('table'), k = cel.dataset.k, tr = cel.closest('tr');
-    const ed = prevEdicoes[prevChave(tab, k)], atual = ed !== undefined ? ed : prevAttr(tr, 'data-auto');
+    const cel = e.target.closest && e.target.closest('.prev-edit, .prev-meta-edit'); if (!cel) return;
+    const tab = cel.closest('table'), k = cel.dataset.k, tr = cel.closest('tr'), agora = prevLinhaAgora(tab, tr, k);
+    const atual = cel.classList.contains('prev-meta-edit') ? agora.fech : agora.fc;
     cel.textContent = atual == null ? '' : String(Math.round(atual * 100) / 100).replace('.', ',');
+    cel.dataset.inicial = cel.textContent;
     const r = document.createRange(); r.selectNodeContents(cel); const s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
 });
 document.addEventListener('keydown', e => {
-    if (e.key === 'Enter' && e.target.closest && e.target.closest('.prev-edit')) { e.preventDefault(); e.target.blur(); }
-    if (e.key === 'Escape' && e.target.closest && e.target.closest('.prev-edit')) { e.target.dataset.cancelar = '1'; e.target.blur(); }
+    if (e.key === 'Enter' && e.target.closest && e.target.closest('.prev-edit, .prev-meta-edit')) { e.preventDefault(); e.target.blur(); }
+    if (e.key === 'Escape' && e.target.closest && e.target.closest('.prev-edit, .prev-meta-edit')) { e.target.dataset.cancelar = '1'; e.target.blur(); }
 });
 document.addEventListener('focusout', e => {
-    const cel = e.target.closest && e.target.closest('.prev-edit'); if (!cel) return;
-    const tab = cel.closest('table'), k = cel.dataset.k, tr = cel.closest('tr'), chave = prevChave(tab, k);
-    if (cel.dataset.cancelar) { delete cel.dataset.cancelar; }
+    const cel = e.target.closest && e.target.closest('.prev-edit, .prev-meta-edit'); if (!cel) return;
+    const tab = cel.closest('table'), k = cel.dataset.k, tr = cel.closest('tr'), chave = prevChave(tab, k), chaveMeta = prevChaveMeta(tab, k);
+    const inicial = cel.dataset.inicial; delete cel.dataset.inicial;
+    if (cel.dataset.cancelar || cel.textContent.trim() === (inicial || '').trim()) { delete cel.dataset.cancelar; }   // só passou pela célula
+    else if (cel.classList.contains('prev-meta-edit')) {         // meta 🎯: guarda a meta; vazio solta a meta
+        const txt = cel.textContent.trim(), v = txt === '' ? null : prevLer(txt);
+        if (v === null) delete prevEdicoes[chaveMeta];
+        else { prevEdicoes[chaveMeta] = v; delete prevEdicoes[chave]; }
+        prevSalvar();
+    }
     else {
+        delete prevEdicoes[chaveMeta];                           // forecast digitado à mão: a meta da linha sai
         const txt = cel.textContent.trim(), v = txt === '' ? null : prevLer(txt), auto = prevAttr(tr, 'data-auto');
         if (v === null) delete prevEdicoes[chave];
         else if (auto !== null && Math.abs(v - auto) < 0.005) delete prevEdicoes[chave];
@@ -1406,6 +1509,13 @@ document.addEventListener('focusout', e => {
     prevRecalcularTodas();                       // a mesma linha aparece no Forecast e nas Indiretas
 });
 
+// ↺ de cada linha: volta só aquela linha ao forecast automático (tira o valor digitado e a meta)
+document.addEventListener('click', e => {
+    const b = e.target.closest && e.target.closest('.btn-prev-linha'); if (!b) return;
+    const tab = b.closest('table'), k = b.closest('tr').dataset.k;
+    delete prevEdicoes[prevChave(tab, k)]; delete prevEdicoes[prevChaveMeta(tab, k)];
+    prevSalvar(); prevRecalcularTodas();
+});
 function previsaoRestaurar(botao) {
     const tab = botao.closest('.prev-card').querySelector('table.tabela-previsao');
     Object.keys(prevEdicoes).filter(c => c.startsWith(`${tab.dataset.mes}|${tab.dataset.prev}|`)).forEach(c => delete prevEdicoes[c]);
@@ -1450,11 +1560,15 @@ function gerarExecutivo(libs, modo) {
     if (celular) cont.classList.add('exec-celular');
     // gráfico: vira imagem do que está desenhado; no celular é redesenhado estreito (letras do mesmo tamanho da tela)
     const fotoGrafico = (cv) => {
-        const ch = celular && window.Chart && Chart.getChart ? Chart.getChart(cv) : null;
+        const ch = window.Chart && Chart.getChart ? Chart.getChart(cv) : null;
         if (!ch) return cv.toDataURL('image/png');
         const dpr = ch.options.devicePixelRatio;
-        try { ch.options.devicePixelRatio = 3; ch.resize(EXEC_CEL_W - 40, 340); return ch.toBase64Image('image/png'); }
-        finally { ch.options.devicePixelRatio = dpr; ch.resize(); }
+        // redesenhado em alta resolução (3×): no celular, estreito; no A4, no tamanho da tela (o gráfico do resumo saía borrado)
+        // (no A4, com o tamanho do último desenho: a aba do gráfico pode estar escondida e ter tamanho zero agora)
+        const w0 = ch.width, h0 = ch.height;
+        if (!celular && !(w0 && h0)) return cv.toDataURL('image/png');
+        try { ch.options.devicePixelRatio = 3; if (celular) ch.resize(EXEC_CEL_W - 40, 340); else ch.resize(w0, h0); return ch.toBase64Image('image/png'); }
+        finally { ch.options.devicePixelRatio = dpr; if (celular) ch.resize(); else ch.resize(w0, h0); }
     };
     const clona = (el) => {
         if (!el) return null;
@@ -1468,7 +1582,9 @@ function gerarExecutivo(libs, modo) {
         c.querySelectorAll('[contenteditable]').forEach(x => x.removeAttribute('contenteditable'));
         c.querySelectorAll('.jg-col').forEach((col) => { const t = col.querySelector('.jg-txt'); if (t && !t.textContent.trim()) col.remove(); });
         c.querySelectorAll('.jg').forEach((b) => { const n = b.querySelectorAll('.jg-col').length; if (!n) b.remove(); else if (n === 1) b.querySelector('.jg-cols').classList.add('um'); });
-        c.querySelectorAll('.btn-remover-item').forEach(x => x.remove());
+        c.querySelectorAll('.btn-remover-item, .btn-prev-linha').forEach(x => x.remove());
+        c.querySelectorAll('.prev-meta-edit').forEach(x => x.classList.remove('prev-meta-edit', 'com-meta'));
+        if (el.id === 'plano-card') c.classList.add('exec-plano');      // no A4 é fotografado à parte, numa largura própria
         c.querySelectorAll('[id]').forEach(x => x.removeAttribute('id'));
         c.removeAttribute('id');
         if (celular) c.querySelectorAll('table').forEach(enxugaTabelaCelular);
@@ -1614,7 +1730,9 @@ async function gerarPdfDireto(cont, libs, nome) {
         // computadores (barra de rolagem, escala do Windows, fontes) a cópia quebra o texto diferente, os quadros ficam
         // com outra altura e o recorte "escorregava" — o título da seção seguinte ia parar no fim da página anterior.
         // celular: imagem mais fina (a tela do telefone tem mais pontos), sem passar do limite de altura de um canvas (~32 mil px)
-        const ESC = celular ? Math.max(1, Math.min(3, Math.floor(300000 / Math.max(1, raiz.scrollHeight + 100)) / 10)) : 2;
+        // A4: um pouco mais de definição (até 2,5×) enquanto a altura do documento permitir; com muitas análises, volta a 2×
+        const ESC = celular ? Math.max(1, Math.min(3, Math.floor(300000 / Math.max(1, raiz.scrollHeight + 100)) / 10))
+            : Math.max(2, Math.min(2.5, Math.floor(300000 / Math.max(1, raiz.scrollHeight + 100)) / 10));
         let medidas = null;
         const foto = await w.html2canvas(raiz, { scale: ESC, backgroundColor: '#FFFFFF', logging: false, imageTimeout: 3000,
             windowWidth: largura, windowHeight: Math.max(800, Math.ceil(raiz.scrollHeight) + 100),
@@ -1646,12 +1764,96 @@ async function gerarPdfDireto(cont, libs, nome) {
         let y = M, primeira = true;
         const novaPagina = () => { pdf4.addPage(); y = M; };
         const mmPorPx = LW / foto.width;
+        // Plano de ação: fotografado à parte, numa largura escolhida para encaixar no espaço da página (LW × altura livre):
+        // as colunas de texto alargam, as linhas ficam mais baixas e a letra sai maior do que na largura padrão do Executivo
+        const fotoPlano = async (el, livreMm) => {
+            const f2 = document.createElement('iframe');
+            f2.setAttribute('aria-hidden', 'true');
+            f2.style.cssText = `position:fixed; left:0; top:0; width:${larguraBase}px; height:800px; border:0; opacity:0; pointer-events:none; z-index:-1;`;
+            document.body.appendChild(f2);
+            try {
+                const d2 = f2.contentDocument;
+                d2.open();
+                d2.write('<!DOCTYPE html><html lang="pt-BR"><head>' + doc.head.innerHTML + '<style>html, body { margin:0; padding:0; background:#FFFFFF; overflow:hidden !important; }'
+                    + ' #view-executivo { padding:0 !important; margin:0 !important; } #view-executivo .exec-plano { margin:0 !important; }'
+                    + ' #view-executivo table.tabela-plano td { max-width:none; }</style></head><body><div id="view-executivo" class="' + raiz.className + '">'
+                    + el.outerHTML + '</div></body></html>');
+                d2.close();
+                await Promise.race([d2.fonts && d2.fonts.ready ? d2.fonts.ready.catch(() => null) : null, new Promise((r) => setTimeout(r, 2000))]);
+                await injetaLibs(d2, libs);
+                const w2 = f2.contentWindow, item = d2.getElementById('view-executivo').firstElementChild, razao = LW / livreMm;
+                let melhor = null;
+                for (let L = larguraBase; L <= 2600; L += 100) {
+                    f2.style.width = L + 'px'; await new Promise((r) => requestAnimationFrame(() => r()));
+                    const hh = item.getBoundingClientRect().height, nota = Math.min(1 / L, 1 / (razao * hh));
+                    if (!melhor || nota > melhor.nota) melhor = { L, nota };
+                }
+                f2.style.width = melhor.L + 'px'; await new Promise((r) => setTimeout(r, 50));
+                const ret = item.getBoundingClientRect(), altJanela = Math.ceil(ret.height + 20);
+                f2.style.height = altJanela + 'px'; await new Promise((r) => setTimeout(r, 30));
+                const cv = await w2.html2canvas(item, { scale: 2, backgroundColor: '#FFFFFF', logging: false, imageTimeout: 3000, windowWidth: melhor.L, windowHeight: altJanela });
+                return { url: cv.toDataURL('image/jpeg', 0.92), larg: ret.width, alt: ret.height };
+            } finally {
+                f2.remove();
+            }
+        };
+        // Seções com várias tabelas (Orçado x Realizado e Faturamento Mês a Mês: água + esgoto): se não cabem juntas numa
+        // página, mas cabem reduzindo até 60%, vão juntas — a redução se ajusta ao tamanho das tabelas a cada ciclo lido;
+        // abaixo de 60% a letra ficaria pequena demais e a seção segue o formato normal (uma tabela por página)
+        const juntas = new Map(), pular = new Set();
+        filhos.forEach((el, i) => {
+            if (!el.classList.contains('exec-secao')) return;
+            const itens = [];
+            for (let j = i + 1; j < filhos.length && !filhos[j].classList.contains('exec-secao'); j++) itens.push(j);
+            if (itens.length < 2 || itens.some((j) => /exec-plano|exec-just-bloco|card-justificativa/.test(filhos[j].className))) return;
+            const alturas = itens.map((j) => posicao(filhos[j], j).altPx * mmPorPx);
+            if (alturas.some((h) => !h)) return;
+            const soma = alturas.reduce((t, h) => t + h, 0) + 3 * (itens.length - 1), livre = LH - posicao(el, i).altPx * mmPorPx - 3;
+            if (soma > livre && livre / soma >= 0.6) juntas.set(i, { itens, f: livre / soma });
+        });
         for (const [i, el] of filhos.entries()) {
+            if (pular.has(i)) continue;
             const { topo, altPx } = posicao(el, i);
             if (!altPx) continue;
             const alt = altPx * mmPorPx;
             if (el.classList.contains('exec-secao') && !primeira && y > M) novaPagina();
-            if (alt <= LH) {
+            if (juntas.has(i)) {
+                pdf4.addImage(recorte(topo, altPx), 'JPEG', M, y, LW, alt);
+                y += alt + 3;
+                const { itens, f } = juntas.get(i), ww = LW * f;
+                itens.forEach((j) => {
+                    const p = posicao(filhos[j], j), hh = p.altPx * mmPorPx * f;
+                    pdf4.addImage(recorte(p.topo, p.altPx), 'JPEG', M + (LW - ww) / 2, y, ww, hh);
+                    y += hh + 3 * f; pular.add(j);
+                });
+                primeira = false;
+                continue;
+            }
+            if (el.classList.contains('exec-plano')) {
+                let livre = M + LH - y;
+                if (livre < LH * 0.5) { novaPagina(); livre = LH; }
+                try {
+                    const fp = await fotoPlano(el, livre), esc = Math.min(LW / fp.larg, livre / fp.alt);     // mm por px
+                    if (esc >= (LW / largura) * 0.6) {                    // letra de pelo menos 60% da do resto do Executivo
+                        const ww = fp.larg * esc, hh = fp.alt * esc;
+                        pdf4.addImage(fp.url, 'JPEG', M + (LW - ww) / 2, y, ww, hh);
+                        y += hh + 3; primeira = false;
+                        continue;
+                    }
+                } catch (e) { console.warn('Plano de ação à parte indisponível; segue no formato padrão', e); }
+            }
+            // quadro mais alto que o espaço (ex.: o plano de ação): reduz para caber inteiro numa página, em vez de cortar em
+            // duas — até 60% do tamanho (maior que isso segue em fatias: a letra ficaria pequena demais). Se na página só
+            // está o título da seção, o quadro fica com ele (nunca deixa o título sozinho numa página em branco).
+            const livre = M + LH - y, REDUZ = 0.6;
+            const soTitulo = i > 0 && filhos[i - 1].classList.contains('exec-secao') && y < M + 25;
+            const cabeAqui = alt > livre && alt * REDUZ <= livre && (soTitulo || (alt > LH && livre >= LH * 0.5));
+            if (cabeAqui || (alt > LH && alt * REDUZ <= LH && !soTitulo)) {
+                if (!cabeAqui) novaPagina();
+                const hh = M + LH - y, ww = LW * hh / alt;
+                pdf4.addImage(recorte(topo, altPx), 'JPEG', M + (LW - ww) / 2, y, ww, hh);
+                y += hh + 3;
+            } else if (alt <= LH) {
                 if (y + alt > M + LH) novaPagina();
                 pdf4.addImage(recorte(topo, altPx), 'JPEG', M, y, LW, alt);
                 y += alt + 3;
@@ -1937,7 +2139,7 @@ function criaSync(secao, nome, obter, definir, redesenhar, ocupado) {
 var syncForecast = criaSync('forecast', 'Forecast', () => prevEdicoes,
     (m) => { prevEdicoes = m; try { localStorage.setItem(LS_PREFIXO + PREV_CHAVE_LS, JSON.stringify({ edicoes: prevEdicoes, oculta: prevOculta, ocultaInd: prevOcultaInd })); } catch (e) {} },
     () => prevRecalcularTodas(),
-    () => document.activeElement && document.activeElement.classList && document.activeElement.classList.contains('p-prev'));
+    () => document.activeElement && document.activeElement.classList && (document.activeElement.classList.contains('p-prev') || document.activeElement.classList.contains('p-fech')));
 var syncSituacao = criaSync('situacao', 'Situação do grupo',
     () => { const plano = {}; Object.entries(sitManuais).forEach(([ref, gs]) => Object.entries(gs).forEach(([g, v]) => { plano[ref + '|' + g] = v; })); return plano; },
     (plano) => { sitManuais = {}; Object.entries(plano).forEach(([k, v]) => { const i = k.lastIndexOf('|'); (sitManuais[k.slice(0, i)] = sitManuais[k.slice(0, i)] || {})[k.slice(i + 1)] = v; });
@@ -2375,7 +2577,7 @@ document.addEventListener('input', (e) => {
     it[campo] = campo === 'media' ? garLerNumero(inp.value) : inp.value;
     if (campo === 'obs') {
         if (inp.value === OS_ABRIR) { if (!it.os_data) it.os_data = garHoje(); delete it.os_status; }
-        else { delete it.os_data; delete it.os_status; delete it.os_realizada; delete it.os_num; }
+        else { delete it.os_data; delete it.os_status; delete it.os_realizada; delete it.os_num; delete it.os_exoc; delete it.os_retram; delete it.os_retram_n; delete it.os_obs; }
     }
     if (campo === 'os_num') it.os_num = inp.value.trim();
     if (campo === 'media') {
@@ -2567,42 +2769,86 @@ function garBaixarEml(html, assunto, nome) {
 const OS_ABRIR = 'Abrir O.S.', OS_NAO = 'Não abrir O.S.', OS_PRAZO_DIAS = 10;
 const garHoje = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
 const garDataBR = (iso) => (iso ? iso.slice(8, 10) + '/' + iso.slice(5, 7) + '/' + iso.slice(0, 4) : '–');
-function garPrazo(iso) { const d = new Date(iso + 'T12:00:00'); d.setDate(d.getDate() + OS_PRAZO_DIAS); return d; }
+function garPrazo(iso, dias) { const d = new Date(iso + 'T12:00:00'); d.setDate(d.getDate() + (dias == null ? OS_PRAZO_DIAS : dias)); return d; }
 // todas as O.S. abertas (de qualquer mês) que ainda não foram marcadas como realizadas
+// Situações da O.S. no aviso: Realizada e EXOC encerram (vão para o histórico); Retramitada/Solicitada prioridade reinicia a
+// contagem e a O.S. volta ao aviso depois de OS_RETRAM_DIAS dias (pode ser retramitada de novo). Obs.: texto livre (os_obs).
+const OS_RETRAM = 'Retramitada', OS_RETRAM_DIAS = 5, OS_FECHADAS = ['Realizada', 'EXOC'];
+const OS_ROTULO = { Realizada: 'Realizada', EXOC: 'EXOC', Retramitada: 'Retramitada/Solicitada prioridade' };
 function garOS() {
     const hoje = new Date(garHoje() + 'T12:00:00');
-    return Object.entries(garItens).filter(([, v]) => v.obs === OS_ABRIR && v.os_status !== 'Realizada').map(([k, v]) => {
+    return Object.entries(garItens).filter(([, v]) => v.obs === OS_ABRIR && !OS_FECHADAS.includes(v.os_status)).map(([k, v]) => {
         const i = k.lastIndexOf('|'), ref = k.slice(0, i), lig = k.slice(i + 1);
         const data = v.os_data || (v.foto ? v.foto.slice(0, 10) : garHoje());
-        const prazo = garPrazo(data), dias = Math.round((hoje - prazo) / 86400000);
-        return { k, ref, lig, v, data, prazo, dias, vencida: dias >= 0, d: GAR.porLig.get(lig) };
+        const retram = v.os_status === OS_RETRAM && v.os_retram ? v.os_retram : null;
+        const prazo = garPrazo(retram || data, retram ? OS_RETRAM_DIAS : OS_PRAZO_DIAS), dias = Math.round((hoje - prazo) / 86400000);
+        return { k, ref, lig, v, data, retram, prazo, dias, vencida: dias >= 0, d: GAR.porLig.get(lig) };
     }).filter((o) => garVisivel(o.d)).sort((a, b) => b.dias - a.dias);
 }
+// O.S. já encerradas (Realizada ou EXOC): marcar não apaga nada (só grava o status e a data), então elas continuam na
+// análise e podem voltar para o aviso ("↺ Voltar para o aviso") — sem guardar nada a mais
+const garOSDataFim = (v) => v.os_realizada || v.os_exoc || '';
+function garOSRealizadas() {
+    return Object.entries(garItens).filter(([, v]) => v.obs === OS_ABRIR && OS_FECHADAS.includes(v.os_status)).map(([k, v]) => {
+        const i = k.lastIndexOf('|'), lig = k.slice(i + 1);
+        return { k, lig, v, data: v.os_data || (v.foto ? v.foto.slice(0, 10) : ''), d: GAR.porLig.get(lig) };
+    }).filter((o) => garVisivel(o.d)).sort((a, b) => String(garOSDataFim(b.v)).localeCompare(String(garOSDataFim(a.v))));
+}
+const garOSObs = (o) => `<td class="gar-os-obs-td"><input class="gar-in gar-os-obs" data-k="${garEsc(o.k)}" value="${garEsc(o.v.os_obs || '')}" placeholder="Obs.:" aria-label="Observação da O.S. da matrícula ${garEsc(o.lig)}"></td>`;
 function garDesenharOS() {
     const el = document.getElementById('garAvisoOS'); if (!el || !GAR.dados) return;
-    const os = garOS(), vencidas = os.filter((o) => o.vencida), noPrazo = os.length - vencidas.length;
+    const os = garOS(), vencidas = os.filter((o) => o.vencida), noPrazo = os.length - vencidas.length, feitas = garOSRealizadas();
     const aba = document.querySelector('[data-gar-aba="resumo"]');
-    if (aba) aba.innerHTML = 'Resumo de Ganhos' + (vencidas.length ? ` <span class="gar-badge" title="O.S. com prazo de ${OS_PRAZO_DIAS} dias vencido">${vencidas.length}</span>` : '');
-    if (!os.length) { el.hidden = true; el.innerHTML = ''; return; }
+    if (aba) aba.innerHTML = 'Resumo de Ganhos' + (vencidas.length ? ` <span class="gar-badge" title="O.S. com prazo vencido">${vencidas.length}</span>` : '');
+    if (!os.length && !feitas.length) { el.hidden = true; el.innerHTML = ''; return; }
     el.hidden = false;
     const motivo = (m) => (m === 'QUEDA' ? 'Queda de consumo' : m === 'AUMENTO' ? 'Aumento de consumo' : '–');
+    const historico = feitas.length ? `<details class="gar-os-hist"${GAR.osHistAberto ? ' open' : ''}><summary>O.S. já marcadas como realizadas / EXOC (${feitas.length})</summary>`
+        + '<p class="nota-secao">Marcou por engano? Clique em <b>↺ Voltar para o aviso</b>: a O.S. volta para a lista acima (se o prazo já venceu) com os mesmos dados.</p>'
+        + '<div class="tabela-wrap"><table class="tabela-garantia"><thead><tr><th>Matrícula</th><th>Cliente</th><th>Grupo</th><th>SUP</th><th>Motivo</th>'
+        + '<th>Nº O.S.</th><th>Análise</th><th>Situação</th><th>Marcada em</th><th></th><th>Obs.:</th></tr></thead><tbody>'
+        + feitas.map((o) => `<tr><td><b>${garEsc(o.lig)}</b></td><td class="gar-cli" title="${garEsc(o.d && o.d.nome)}">${garEsc(o.d && o.d.nome)}</td>`
+            + `<td>${garEsc(o.d && o.d.grupo)}</td><td>${garEsc(o.d && o.d.sup)}</td><td>${motivo(o.v.motivo)}</td>`
+            + `<td>${o.v.os_num ? garEsc(o.v.os_num) : '–'}</td><td>${garDataBR(o.data)}</td><td>${garEsc(OS_ROTULO[o.v.os_status] || o.v.os_status)}</td><td>${garDataBR(garOSDataFim(o.v))}</td>`
+            + `<td><button type="button" class="btn-just gar-os-voltar" data-k="${garEsc(o.k)}" title="Desfazer: a O.S. volta a ser acompanhada no aviso">↺ Voltar para o aviso</button></td>${garOSObs(o)}</tr>`).join('')
+        + '</tbody></table></div></details>' : '';
+    const nRetram = os.filter((o) => o.retram && !o.vencida).length;
     el.innerHTML = `<h2>⚠ O.S. abertas — prazo de ${OS_PRAZO_DIAS} dias</h2>`
-        + `<p class="nota-secao">${vencidas.length ? `<b>${vencidas.length}</b> matrícula(s) com O.S. aberta há ${OS_PRAZO_DIAS} dias ou mais: verifique se foram realizadas ou estão em atraso.` : 'Nenhuma O.S. com prazo vencido.'}`
-        + (noPrazo ? ` ${noPrazo} ainda dentro do prazo.` : '') + ' Depois de conferir, marque como realizada.</p>'
+        + `<p class="nota-secao">${vencidas.length ? `<b>${vencidas.length}</b> matrícula(s) com O.S. com prazo vencido: verifique se foram realizadas ou estão em atraso.` : 'Nenhuma O.S. com prazo vencido.'}`
+        + (noPrazo ? ` ${noPrazo} ainda dentro do prazo${nRetram ? ` (${nRetram} retramitada(s), voltam ${OS_RETRAM_DIAS} dias depois)` : ''}.` : '')
+        + ` Depois de conferir, escolha a situação: <b>Realizada</b> ou <b>EXOC</b> encerram a O.S.; <b>Retramitada/Solicitada prioridade</b> reinicia a contagem e ela volta ao aviso em ${OS_RETRAM_DIAS} dias.</p>`
         + (vencidas.length ? '<div class="tabela-wrap"><table class="tabela-garantia"><thead><tr><th>Matrícula</th><th>Cliente</th><th>Grupo</th><th>SUP</th><th>Motivo</th>'
-            + '<th>Retorno superintendência</th><th>Nº O.S.</th><th>Análise</th><th>Prazo (D+' + OS_PRAZO_DIAS + ')</th><th class="num">Dias após o prazo</th><th></th></tr></thead><tbody>'
+            + `<th>Retorno superintendência</th><th>Nº O.S.</th><th>Análise</th><th title="D+${OS_PRAZO_DIAS} da análise; retramitada: D+${OS_RETRAM_DIAS} da retramitação">Prazo</th><th class="num">Dias após o prazo</th><th>Situação</th><th>Obs.:</th></tr></thead><tbody>`
             + vencidas.map((o) => `<tr><td><b>${garEsc(o.lig)}</b></td><td class="gar-cli" title="${garEsc(o.d && o.d.nome)}">${garEsc(o.d && o.d.nome)}</td>`
                 + `<td>${garEsc(o.d && o.d.grupo)}</td><td>${garEsc(o.d && o.d.sup)}</td><td>${motivo(o.v.motivo)}</td><td>${garEsc(o.v.retorno)}</td>`
-                + `<td>${o.v.os_num ? '<b>' + garEsc(o.v.os_num) + '</b>' : '<span class="gar-sit">não informado</span>'}</td><td>${garDataBR(o.data)}</td><td>${o.prazo.toLocaleDateString('pt-BR')}</td><td class="num gar-neg"><b>${o.dias}</b></td>`
-                + `<td><button type="button" class="btn-just gar-os-ok" data-k="${garEsc(o.k)}" title="O.S. conferida e realizada: sai do aviso">✓ Realizada</button></td></tr>`).join('')
-            + '</tbody></table></div>' : '');
+                + `<td>${o.v.os_num ? '<b>' + garEsc(o.v.os_num) + '</b>' : '<span class="gar-sit">não informado</span>'}</td>`
+                + `<td>${garDataBR(o.data)}${o.retram ? `<small class="gar-os-retram">retramitada em ${garDataBR(o.retram)}${o.v.os_retram_n > 1 ? ` (${o.v.os_retram_n}ª vez)` : ''}</small>` : ''}</td>`
+                + `<td>${o.prazo.toLocaleDateString('pt-BR')}</td><td class="num gar-neg"><b>${o.dias}</b></td>`
+                + `<td><select class="gar-in gar-os-sit" data-k="${garEsc(o.k)}" aria-label="Situação da O.S. da matrícula ${garEsc(o.lig)}"><option value="">Marcar como…</option>`
+                + `<option value="Realizada">✓ Realizada</option><option value="EXOC">EXOC</option><option value="${OS_RETRAM}">↻ Retramitada/Solicitada prioridade</option></select></td>${garOSObs(o)}</tr>`).join('')
+            + '</tbody></table></div>' : '') + historico;
 }
-document.addEventListener('click', (e) => {
-    const b = e.target.closest && e.target.closest('.gar-os-ok'); if (!b) return;
-    const it = garItens[b.dataset.k]; if (!it) return;
-    it.os_status = 'Realizada'; it.os_realizada = garHoje();
+document.addEventListener('change', (e) => {
+    const sel = e.target.closest && e.target.closest('.gar-os-sit'); if (!sel || !sel.value) return;
+    const it = garItens[sel.dataset.k]; if (!it) return;
+    if (sel.value === 'Realizada') { it.os_status = 'Realizada'; it.os_realizada = garHoje(); }
+    else if (sel.value === 'EXOC') { it.os_status = 'EXOC'; it.os_exoc = garHoje(); }
+    else if (sel.value === OS_RETRAM) { it.os_status = OS_RETRAM; it.os_retram = garHoje(); it.os_retram_n = (it.os_retram_n || 0) + 1; }
     garSalvar(); garDesenharOS();
 });
+document.addEventListener('input', (e) => {                    // Obs.: salva enquanto digita (sem redesenhar, para não perder o foco)
+    const inp = e.target.closest && e.target.closest('.gar-os-obs'); if (!inp) return;
+    const it = garItens[inp.dataset.k]; if (!it) return;
+    it.os_obs = inp.value;
+    clearTimeout(GAR.tObsOS); GAR.tObsOS = setTimeout(garSalvar, 400);
+});
+document.addEventListener('click', (e) => {
+    const b = e.target.closest && e.target.closest('.gar-os-voltar'); if (!b) return;
+    const it = garItens[b.dataset.k]; if (!it) return;
+    delete it.os_status; delete it.os_realizada; delete it.os_exoc;
+    garSalvar(); garDesenharOS();
+});
+document.addEventListener('toggle', (e) => { if (e.target.classList && e.target.classList.contains('gar-os-hist')) GAR.osHistAberto = e.target.open; }, true);
 
 // --- Resumo de Ganhos ---
 function garTotais() {
@@ -2656,7 +2902,7 @@ function garRedesenhar() {
 var syncGarantia = criaSync('garantia', 'Análise de garantia', () => garItens,
     (m) => { garItens = m; try { localStorage.setItem(LS_PREFIXO + GAR_LS, JSON.stringify(garItens)); } catch (e) {} },
     () => garRedesenhar(),
-    () => !!(document.activeElement && document.activeElement.closest && document.activeElement.closest('#garTabelaAnalise')));
+    () => !!(document.activeElement && document.activeElement.closest && document.activeElement.closest('#garTabelaAnalise, #garAvisoOS')));
 garCarregar().then(() => { garRedesenhar(); syncGarantia.puxar(); }).catch((e) => console.warn('Garantia: dados não carregaram', e));
 
 // ===== Aba Plano de ação: tabela colada da planilha =====
@@ -2923,7 +3169,11 @@ function opBlocoDestaque(D) {
 function opBlocoCards(D) {
     const A = D.atual; if (!A) return '';
     const base = D.projecao != null ? D.projecao : A.bruto.r;
-    const quadros = D.refs.slice(0, 3).map((ref) => {
+    // RFs em ordem cronológica (ex.: RF3T25, RF1T26, RF2T26 — os 3 mais recentes), depois a tendência
+    const chaveRf = (r) => { const m = /RF\s*0?(\d)\s*T\s*(\d{2})/i.exec(r); return m ? +m[2] * 10 + +m[1] : null; };
+    const rfs = D.refs.filter((r) => chaveRf(r) != null).sort((a, b) => chaveRf(a) - chaveRf(b)).slice(-3);
+    const refsCards = rfs.concat(D.refs.filter((r) => chaveRf(r) == null)).slice(0, 3);
+    const quadros = refsCards.map((ref) => {
         const d = ref === D.ref ? A : opDre(D.sup, D.mes, ref), o = d && d.bruto.o;
         return `<div class="op-card"><span class="op-rot">${garEsc(ref)} — ${garEsc(opMesCurto(D.mes))}</span><b>${opMoeda(o, 2)}</b>`
             + (o ? opSeta(opVar(A.bruto.r, o), 'realizado vs orçado') : '<span class="op-var">sem orçado</span>') + '</div>';
@@ -3063,7 +3313,7 @@ function opGraficoGrupos(D, G, alvo) {
             { type: 'bar', label: rotBase, data: gs.map(base), backgroundColor: '#C9D6E3', borderRadius: 2, maxBarThickness: 46, order: 1 }] },
         options: { animation: false, responsive: true, maintainAspectRatio: false, devicePixelRatio: 2,
             layout: { padding: { top: 34 } },
-            plugins: { legend: { position: 'bottom', labels: { boxWidth: 18, boxHeight: 6, font: { size: 11 } } }, tooltip: { enabled: false } },
+            plugins: { legend: { position: 'bottom', labels: { boxWidth: 18, boxHeight: 6, font: { size: 11 }, sort: (x, y) => y.datasetIndex - x.datasetIndex } }, tooltip: { enabled: false } },   // legenda: orçado antes do realizado
             scales: { x: { grid: { display: false }, ticks: { font: { size: 10 } } }, y: { display: false, beginAtZero: true } } },
         plugins: [{ id: 'opRotulos', afterDatasetsDraw(c) {
             const g = c.ctx, linha = c.getDatasetMeta(0).data, barras = c.getDatasetMeta(1).data, topo = c.chartArea.top - 26;
@@ -3287,6 +3537,8 @@ async function printItens(tipo) {
         if (!el) return null;
         const c = el.cloneNode(true);
         c.querySelectorAll('[contenteditable]').forEach((x) => x.removeAttribute('contenteditable'));
+        c.querySelectorAll('.btn-prev-linha').forEach((x) => x.remove());
+        c.querySelectorAll('.prev-meta-edit').forEach((x) => x.classList.remove('prev-meta-edit', 'com-meta'));
         c.querySelectorAll('[id]').forEach((x) => x.removeAttribute('id')); c.removeAttribute('id');
         c.querySelectorAll('[title]').forEach((x) => x.removeAttribute('title'));
         if (cls) c.classList.add(...cls.split(' '));

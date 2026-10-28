@@ -164,6 +164,10 @@ body.relatorio-aberto { overflow: hidden; }
 .tabela-top20 .seta { font-size: .7rem; opacity: .9; }
 .tabela-top20 td { padding: 3px 10px; border-top: 1px solid var(--line); vertical-align: middle; }
 .tabela-top20 tr:nth-child(even) td { background: #F7F8FA; }
+.tabela-top20 td.rest { padding: 2px 4px; text-align: center; }
+.btn-rest-linha { border: 1px solid var(--line); background: #fff; color: var(--azul); border-radius: 4px; cursor: pointer; font-size: .85rem; line-height: 1; padding: 3px 6px; }
+.btn-rest-linha:hover:not(:disabled) { background: #EEF4FB; }
+.btn-rest-linha:disabled { opacity: .25; cursor: default; }
 .tabela-top20 td.cli { max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tabela-top20 input {
   width: 110px; padding: 3px 8px; font: inherit; font-size: .82rem; text-align: right; font-variant-numeric: tabular-nums;
@@ -248,8 +252,9 @@ body { background: var(--bg); color: var(--ink); font-family: "Segoe UI", Arial,
 @media (max-width: 640px) { .barra-dados { padding: 10px; gap: 6px; } .barra-dados .btn-top { padding: 8px 10px; font-size: 12.5px; } }
 .menu-pdf-lista { position: absolute; right: 0; top: 100%; margin-top: 6px; z-index: 40; background: #fff; border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 8px 22px rgba(17,42,66,.18); padding: 6px 0; min-width: 250px; }
 .menu-pdf-lista[hidden] { display: none; }
-#menuPdf button { display: block; width: 100%; text-align: left; border: 0; background: transparent; color: var(--ink); font: inherit; font-size: 13.5px; font-weight: 600; padding: 9px 14px; cursor: pointer; }
-#menuPdf button:hover, #menuPdf button:focus-visible { background: #f2f8fc; outline: none; }
+#menuBases { min-width: 340px; left: 0; right: auto; }
+.menu-pdf-lista button { display: block; width: 100%; text-align: left; border: 0; background: transparent; color: var(--ink); font: inherit; font-size: 13.5px; font-weight: 600; padding: 9px 14px; cursor: pointer; }
+.menu-pdf-lista button:hover, .menu-pdf-lista button:focus-visible { background: #f2f8fc; outline: none; }
 .menu-pdf-lista small { display: block; font-weight: 400; font-size: 11.5px; color: #5b6b80; margin-top: 2px; }
 .dropdown > button { border: 0; border-left: 1px solid rgba(255,255,255,.25); border-radius: 0 8px 8px 0; background: transparent; color: #fff; padding: 8px 11px; font-size: 12px; font-weight: 700; cursor: pointer; }
 .dropdown-content { display: none; position: absolute; right: 0; background: #fff; color: var(--ink); min-width: 220px; border: 1px solid var(--line); box-shadow: 0 8px 22px rgba(17,42,66,.18); border-radius: 10px; z-index: 30; padding: 8px 0; max-height: 300px; overflow-y: auto; margin-top: 6px; }
@@ -416,7 +421,7 @@ body.sem-pasta #btnPasta, body.sem-pasta #btnLimparCache { display: none; }
 <header class="top">
   <div class="top-linha">
     <div>
-      <div class="eyebrow">Águas do Rio • Relatório Executivo <span class="versao-nuvem"><span class="versao" id="versao">v122</span><button type="button" class="nuvem nuvem-erro" id="nuvem" title="Sem pasta conectada: as alterações ficam só neste navegador" aria-label="Situação do salvamento na nuvem"></button></span></div>
+      <div class="eyebrow">Águas do Rio • Relatório Executivo <span class="versao-nuvem"><span class="versao" id="versao">v123</span><button type="button" class="nuvem nuvem-erro" id="nuvem" title="Sem pasta conectada: as alterações ficam só neste navegador" aria-label="Situação do salvamento na nuvem"></button></span></div>
       <h1 id="titulo">Análise de Faturamento — Água e Esgoto</h1>
     </div>
     <div class="filtros" id="filtros">
@@ -497,6 +502,11 @@ body.sem-pasta #btnPasta, body.sem-pasta #btnLimparCache { display: none; }
       </span></span>
     <button type="button" class="btn-top" id="btnOnePage" hidden title="One page (acompanhamento do faturamento em uma página, conforme os filtros da tela)">📊 One page</button>
     <button type="button" class="btn-top" id="btnCortadas" hidden title="Baixar o analítico (Excel) das ligações cortadas com Consumo Medido acima de 0 no mês, conforme os filtros da tela">✂ Cortadas com consumo</button>
+    <span class="menu-pdf" id="menuBasesWrap"><button type="button" class="btn-top" id="btnBases" hidden aria-haspopup="true" aria-expanded="false" aria-controls="menuBases" title="Bases analíticas em Excel, conforme os filtros da tela">📥 Bases analíticas ▾</button>
+      <span class="menu-pdf-lista" id="menuBases" role="menu" hidden>
+        <button type="button" role="menuitem" data-base="completa-atual">Base completa por matrícula — mês atual<small>Dados da matrícula, consumo medido e faturado (água e esgoto) e faturamento água, esgoto e total</small></button>
+        <button type="button" role="menuitem" data-base="completa-anterior">Base completa por matrícula — mês anterior<small>As mesmas colunas, para o mês anterior</small></button>
+      </span></span>
     <button type="button" class="btn-top" id="btnAcomp" hidden title="Baixar as tabelas da planilha de Acompanhamento Mensal (Excel, uma aba por tabela) da Superintendência escolhida">📥 Acompanhamento</button>
   </div>
   <iframe id="quadroRelatorio" title="Relatório comparativo de água e esgoto" hidden></iframe>
@@ -524,6 +534,7 @@ body.sem-pasta #btnPasta, body.sem-pasta #btnLimparCache { display: none; }
           <th class="num ordenavel" data-ordem="consumo" tabindex="0" title="Ordenar">Consumo Faturado (m³) <span class="seta"></span></th>
           <th class="num" id="thValorAnt" title="Valor total no mês anterior">Valor mês ant.</th>
           <th class="num ordenavel" data-ordem="valor" tabindex="0" title="Ordenar">Valor total (R$) <span class="seta"></span></th>
+          <th class="th-rest" title="Restaurar os valores originais só da linha"></th>
         </tr></thead>
         <tbody id="corpoTop20"></tbody>
       </table>
@@ -579,7 +590,7 @@ body.sem-pasta #btnPasta, body.sem-pasta #btnLimparCache { display: none; }
   // que é guardado aqui (pasta conectada, arquivos já lidos, edições) leva este prefixo para não misturar as pastas.
   const ESCOPO = "previa_de_fat_leste";
   window.ESCOPO_ARMAZENAMENTO = ESCOPO;            // o relatório (quadro) usa o mesmo prefixo
-  const VERSAO_SITE = "v122-20261028"; // muda a cada alteração: o selo do cabeçalho é derivado daqui
+  const VERSAO_SITE = "v123-20261028"; // muda a cada alteração: o selo do cabeçalho é derivado daqui
   try { document.getElementById("versao").textContent = VERSAO_SITE.split("-")[0]; } catch (e) {}
   const EXTENSOES = [".csv", ".xlsx", ".xls"];
   const SAIDAS = {
@@ -596,6 +607,9 @@ body.sem-pasta #btnPasta, body.sem-pasta #btnLimparCache { display: none; }
   let worker = null;
   let pastaHandle = null;
   let rodando = false;
+  // Filtro de mês: cada mês escolhido é uma análise inteira refeita no Python (com a base já lida) e guardada aqui
+  // até a próxima leitura da pasta — voltar a um mês já gerado é imediato. mesUltimo = mês mais recente da base.
+  let relPorMes = new Map(), mesUltimo = null, mesesTodos = null, trocandoMes = null, manterView = false;
 
   // ===== Tudo o que é editado no relatório fica num arquivo só da pasta conectada (sincronizada com o SharePoint):
   // ajustes_relatorio.json — justificativas, forecast editado, Situação dos grupos e ajustes da etapa 2.
@@ -892,6 +906,7 @@ body.sem-pasta #btnPasta, body.sem-pasta #btnLimparCache { display: none; }
     idb.set("pasta", null);                       // recarregar a página não volta a tentar a pasta que travou
     pickerSeguro(true);
     if (worker) { try { worker.terminate(); } catch (e) {} worker = null; }
+    trocandoMes = null;
     if (esperaAcomp) { esperaAcomp({ tipo: "acompanhamentoErro", motivo: "carregamento cancelado" }); esperaAcomp = null; }
     fechaRelatorio();
     progresso.hidden = false;
@@ -935,7 +950,7 @@ body.sem-pasta #btnPasta, body.sem-pasta #btnLimparCache { display: none; }
       log.textContent += msg.linha + "\n";
       log.scrollTop = log.scrollHeight;
     }
-    else if (msg.tipo === "erro") { paraEta(); mostraErro(msg.resumo, msg.detalhe); }
+    else if (msg.tipo === "erro") { paraEta(); if (trocandoMes) falhouMes(msg); else mostraErro(msg.resumo, msg.detalhe); }
     else if (msg.tipo === "top20") { salvaEta(); mostraLeitura(msg.dados.leitura); decideEtapa2(msg.dados); }
     else if (msg.tipo === "cacheLimpo") { $("statusNota").textContent = "Arquivos guardados apagados: a próxima análise lê todos os arquivos de novo."; }
     else if (msg.tipo === "concluido") { salvaEta(); abreRelatorio(msg); }
@@ -945,6 +960,8 @@ body.sem-pasta #btnPasta, body.sem-pasta #btnLimparCache { display: none; }
   }
 
   function abreRelatorio({ saidas, refAtual, refAnterior }) {
+    const deMes = trocandoMes !== null;           // análise de outro mês pedida pelo filtro (não é leitura nova da pasta)
+    trocandoMes = null;
     setStatus("Relatório gerado", 100);
     progresso.hidden = true;                      // pronto: some a barra e as informações
     $("fonteStatus").hidden = true;
@@ -979,15 +996,18 @@ body.sem-pasta #btnPasta, body.sem-pasta #btnLimparCache { display: none; }
       return;
     }
 
-    const periodo = refAtual ? `${nomeMes(refAtual)} vs ${nomeMes(refAnterior)}` : "";
-    $("titulo").textContent = periodo ? `Faturamento — ${periodo}` : "Análise de Faturamento — Água e Esgoto";
-    document.title = periodo ? `Relatório ${periodo}` : "Relatório";
+    if (!deMes) { relPorMes = new Map(); mesUltimo = refAtual || null; mesesTodos = null; }
+    manterView = deMes;                           // troca de mês: continua na mesma aba
+    if (refAtual) relPorMes.set(refAtual, { html: htmlRelatorio, refAnterior });
+    tituloPeriodo(refAtual, refAnterior);
     btnAtualizar.hidden = !pastaHandle;
     btnEtapa2.hidden = !pastaHandle;
     $("btnAbrirRel").hidden = !!pastaHandle;      // com a pasta conectada (computador) o "Abrir relatório" não é preciso
 
-    htmlAtual = htmlRelatorio;
-    if (pastaHandle) agendaCopia(3000);
+    if (!deMes) {                                 // a cópia na pasta é sempre a do mês mais recente
+      htmlAtual = htmlRelatorio;
+      if (pastaHandle) agendaCopia(3000);
+    }
     $("btnAcomp").hidden = false;                 // a análise está carregada no Python: dá para gerar o Acompanhamento
     // o cabeçalho do relatório repete o do site; aqui ele some (no arquivo/PDF continua)
     $("quadroRelatorio").srcdoc = htmlRelatorio;
@@ -996,11 +1016,55 @@ body.sem-pasta #btnPasta, body.sem-pasta #btnLimparCache { display: none; }
     document.body.classList.add("relatorio-aberto");
   }
 
+  function tituloPeriodo(refAtual, refAnterior) {
+    const periodo = refAtual ? `${nomeMes(refAtual)} vs ${nomeMes(refAnterior)}` : "";
+    $("titulo").textContent = periodo ? `Faturamento — ${periodo}` : "Análise de Faturamento — Água e Esgoto";
+    document.title = periodo ? `Relatório ${periodo}` : "Relatório";
+  }
+
+  // ===== Filtro de mês: a análise inteira (Resumo, Diretas, Análise, DRE, Forecast, Garantia, One page...) do mês escolhido,
+  // com o comparativo contra o mês anterior a ele =====
+  function carregaMes(ref) {
+    const r = relPorMes.get(ref);
+    manterView = true;
+    tituloPeriodo(ref, r.refAnterior);
+    $("quadroRelatorio").srcdoc = r.html;         // o "load" do quadro monta os filtros de novo (mantendo a aba)
+  }
+  function trocaMes(ref) {
+    const doRelatorio = infoFiltros && infoFiltros.mesAtual;
+    if (!ref || ref === doRelatorio) return;
+    if (relPorMes.has(ref)) { carregaMes(ref); return; }
+    if (!worker || rodando || !relPorMes.size) {  // relatório aberto de arquivo (sem a análise carregada): só DRE/Indiretas mudam
+      filtrosEstado.mes = ref; aplicaFiltros();
+      window.avisoSite("Sem a análise carregada (relatório aberto de arquivo), só a DRE e as Indiretas mudam de mês. Conecte a pasta para ver a análise inteira do mês.", true);
+      return;
+    }
+    trocandoMes = ref;
+    $("quadroRelatorio").hidden = true;
+    progresso.hidden = false;
+    progresso.classList.remove("erro");
+    limpaEtapas();
+    $("statusNota").textContent = `Refazendo a análise para ${nomeMes(ref)} (comparada com o mês anterior). Os arquivos não são lidos de novo.`;
+    iniciaEta("f2");
+    setStatus(`Gerando a análise de ${nomeMes(ref)}…`, 52);
+    bloqueia(true);
+    pegaWorker().postMessage({ fase: "mes", ref: ref === mesUltimo ? null : ref });
+  }
+  function falhouMes(msg) {
+    const ref = trocandoMes; trocandoMes = null;
+    bloqueia(false);
+    progresso.hidden = true;
+    $("quadroRelatorio").hidden = false;
+    if (infoFiltros) $("selMesTop").value = infoFiltros.mesAtual;
+    if (msg.detalhe) $("logExecucao").textContent += "\n" + msg.detalhe;
+    window.avisoSite(`Não foi possível gerar a análise de ${nomeMes(ref)}: ${msg.resumo}`, true);
+  }
+
   function fechaRelatorio() {
     $("etapaTop20").hidden = true;
     $("quadroRelatorio").hidden = true;
     $("barraDados").hidden = true;
-    $("btnPdf").hidden = true; $("menuPdf").hidden = true; $("btnOnePage").hidden = true; $("btnCortadas").hidden = true; $("btnPrint").hidden = true; $("menuPrint").hidden = true;
+    $("btnPdf").hidden = true; $("menuPdf").hidden = true; $("btnOnePage").hidden = true; $("btnCortadas").hidden = true; $("btnBases").hidden = true; $("menuBases").hidden = true; $("btnPrint").hidden = true; $("menuPrint").hidden = true;
     $("vazioWrap").hidden = false;
     document.body.classList.remove("relatorio-aberto", "top20-aberto");
     document.title = "Análise de Faturamento — Água e Esgoto";
@@ -1248,6 +1312,11 @@ body.sem-pasta #btnPasta, body.sem-pasta #btnLimparCache { display: none; }
         td.append(inp, orig);
         tr.appendChild(td);
       });
+      const tdRest = document.createElement("td"); tdRest.className = "rest";
+      const btnRest = document.createElement("button");
+      btnRest.type = "button"; btnRest.className = "btn-rest-linha"; btnRest.dataset.indice = i; btnRest.textContent = "↺"; btnRest.disabled = true;
+      btnRest.title = `Restaurar os valores originais da ligação ${l.ligacao}`; btnRest.setAttribute("aria-label", btnRest.title);
+      tdRest.appendChild(btnRest); tr.appendChild(tdRest);
       tr.dataset.indice = i;
       corpo.appendChild(tr);
     });
@@ -1377,6 +1446,10 @@ body.sem-pasta #btnPasta, body.sem-pasta #btnLimparCache { display: none; }
         mapa.set(l.ligacao, aj);
       }
     });
+    document.querySelectorAll("#corpoTop20 .btn-rest-linha").forEach((b) => {
+      const tr = b.closest("tr");
+      b.disabled = !tr.querySelector("input.alterado, input.invalido") && !(tr.querySelector(".chk-min") || {}).checked;
+    });
     return { ajustes: Array.from(mapa.values()), invalido };
   }
 
@@ -1499,6 +1572,7 @@ body.sem-pasta #btnPasta, body.sem-pasta #btnLimparCache { display: none; }
     iniciaEta("f2");
     setStatus("Processando…", 52);
     bloqueia(true);
+    trocandoMes = null;
     pegaWorker().postMessage({ fase: "continuar", ajustes });
   }
 
@@ -1509,6 +1583,15 @@ body.sem-pasta #btnPasta, body.sem-pasta #btnLimparCache { display: none; }
     continuaAnalise(ajustes, r.ok ? "Ajustes salvos na pasta do SharePoint." : `Ajustes salvos só neste navegador (${r.motivo}).`);
   });
   $("btnPular").addEventListener("click", () => continuaAnalise([]));
+  // ↺ de cada linha: volta só aquela ligação aos valores originais (consumo, valor e a caixa do mínimo)
+  document.addEventListener("click", (e) => {
+    const btn = e.target.closest && e.target.closest("#corpoTop20 .btn-rest-linha");
+    if (!btn) return;
+    const tr = btn.closest("tr"), l = linhasTop20[+btn.dataset.indice];
+    tr.querySelectorAll("input[data-campo]").forEach((inp) => { inp.value = fmtNum(l[inp.dataset.campo], +inp.dataset.dec); inp.title = "original: " + fmtNum(l[inp.dataset.campo], +inp.dataset.dec); });
+    const chk = tr.querySelector(".chk-min"); if (chk) chk.checked = false;
+    atualizaContador();
+  });
   $("btnRestaurar").addEventListener("click", () => {
     document.querySelectorAll("#corpoTop20 input[data-campo]").forEach((inp) => {
       const l = linhasTop20[+inp.dataset.indice];
@@ -1537,7 +1620,7 @@ body.sem-pasta #btnPasta, body.sem-pasta #btnLimparCache { display: none; }
     forecast: ["Forecast", "Previsão de fechamento do mês, editável: ao mudar um valor, os totais e comparações se refazem"],
   };
   // quais filtros valem em cada aba (os demais ficam esmaecidos)
-  const APLICA = { dre: ["Sup", "Ref", "Mes"], indiretas: ["Sup", "Mes"], resumo: ["Sup", "Grupo"], tabelas: ["Sup", "Grupo"], analise: ["Sup", "Grupo"], dados: [], forecast: ["Sup", "Ref"], garantia: ["Sup", "Grupo"], plano: ["Sup", "Grupo"], onepage: ["Sup", "Ref", "Mes", "Grupo"] };
+  const APLICA = { dre: ["Sup", "Ref", "Mes"], indiretas: ["Sup", "Mes"], resumo: ["Sup", "Grupo", "Mes"], tabelas: ["Sup", "Grupo", "Mes"], analise: ["Sup", "Grupo", "Mes"], dados: ["Mes"], forecast: ["Sup", "Ref", "Mes"], garantia: ["Sup", "Grupo", "Mes"], plano: ["Sup", "Grupo", "Mes"], onepage: ["Sup", "Ref", "Mes", "Grupo"] };
 
   function aplicaFiltros() {
     document.querySelectorAll("#nav .tab").forEach((t) => t.classList.toggle("active", t.dataset.view === filtrosEstado.view));
@@ -1567,6 +1650,9 @@ body.sem-pasta #btnPasta, body.sem-pasta #btnLimparCache { display: none; }
     doc.head.appendChild(estilo);
     filtrosEstado.sup = "TODAS"; filtrosEstado.ref = infoFiltros.refPadrao || "";
     filtrosEstado.mes = infoFiltros ? infoFiltros.mesAtual : null;
+    // a lista de meses é a do relatório do mês mais recente (o de um mês passado só vai até ele)
+    if (infoFiltros && (!mesesTodos || !mesUltimo || infoFiltros.mesAtual === mesUltimo)) mesesTodos = infoFiltros.meses;
+    const ultimo = mesUltimo || (infoFiltros && infoFiltros.mesAtual);
     const opcoes = (sel, itens, atual) => { sel.innerHTML = itens.map(([v, t]) => `<option value="${escapa(v)}" ${v === atual ? "selected" : ""}>${escapa(t)}</option>`).join(""); sel.disabled = false; };
     opcoes($("selSupTop"), infoFiltros.sups.map((s) => [s, s === "TODAS" ? "Todas" : s]), "TODAS");
     const fontes = infoFiltros.fontes || [];
@@ -1574,13 +1660,14 @@ body.sem-pasta #btnPasta, body.sem-pasta #btnLimparCache { display: none; }
     const itensRef = [["", "—"]].concat(fontes.map((f) => [f, f]));
     opcoes($("selRef1Top"), fontes.length ? itensRef : [["", "Sem orçado"]], r1 || "");
     opcoes($("selRef2Top"), fontes.length ? itensRef : [["", "—"]], r2 || "");
-    opcoes($("selMesTop"), infoFiltros.meses.map((m) => [m.ref, m.label]), filtrosEstado.mes);
+    opcoes($("selMesTop"), (mesesTodos || infoFiltros.meses).map((m) => [m.ref, m.label]), filtrosEstado.mes);
     const grupos = Array.from(doc.querySelectorAll(".chk-grupo"));
     $("listaGrupos").innerHTML = `<label><input type="checkbox" id="chkTodosGrupos" checked> <b>Selecionar todos</b></label><hr>` +
       grupos.map((g) => `<label><input type="checkbox" class="chk-grupo-top" value="${escapa(g.value)}" checked> ${escapa(g.value)}</label>`).join("");
     $("btnGrupo").textContent = "Todos ▾"; $("btnGrupo").disabled = false;
-    $("btnPdf").hidden = false; $("btnOnePage").hidden = false; $("btnCortadas").hidden = false; $("btnPrint").hidden = false;
-    filtrosEstado.view = "resumo";
+    $("btnPdf").hidden = false; $("btnOnePage").hidden = false; $("btnCortadas").hidden = false; $("btnBases").hidden = false; $("btnPrint").hidden = false;
+    if (!manterView) filtrosEstado.view = "resumo";   // troca de mês: continua na mesma aba
+    manterView = false;
     // filtros de cada pessoa (neste navegador): a última escolha volta ao abrir; sem escolha salva, SUP Interior,
     // Comparar padrão, mês vigente e grupos Liberados/Em Análise. Mês e grupos só voltam se o mês vigente for o mesmo.
     const salvo = lerFiltrosSalvos(), tem = (sel, v) => !!v && Array.from($(sel).options).some((o) => o.value === v);
@@ -1590,8 +1677,7 @@ body.sem-pasta #btnPasta, body.sem-pasta #btnLimparCache { display: none; }
       const [s1, s2] = String(salvo.ref || "").split("|");
       if ((!s1 || tem("selRef1Top", s1)) && (!s2 || tem("selRef2Top", s2))) { $("selRef1Top").value = s1 || ""; $("selRef2Top").value = s2 || ""; filtrosEstado.ref = salvo.ref || ""; }
     }
-    const mesmoMes = infoFiltros && salvo.mesAtual === infoFiltros.mesAtual;
-    if (mesmoMes && tem("selMesTop", salvo.mes)) { filtrosEstado.mes = salvo.mes; $("selMesTop").value = salvo.mes; }
+    const mesmoMes = infoFiltros && salvo.mesAtual === ultimo;      // o relatório abre sempre no mês mais recente
     aplicaFiltros();
     try {
       const w = janela();
@@ -1610,7 +1696,7 @@ body.sem-pasta #btnPasta, body.sem-pasta #btnLimparCache { display: none; }
   function lerFiltrosSalvos() { try { return JSON.parse(localStorage.getItem(FILTROS_LS) || "{}") || {}; } catch (e) { return {}; } }
   function salvaFiltros(extra) {
     const atual = Object.assign(lerFiltrosSalvos(), { sup: filtrosEstado.sup, ref: filtrosEstado.ref, mes: filtrosEstado.mes,
-      mesAtual: infoFiltros ? infoFiltros.mesAtual : null }, extra || {});
+      mesAtual: mesUltimo || (infoFiltros ? infoFiltros.mesAtual : null) }, extra || {});
     try { localStorage.setItem(FILTROS_LS, JSON.stringify(atual)); } catch (e) { /* sem armazenamento */ }
   }
   function aplicaGrupos() {
@@ -1649,7 +1735,7 @@ body.sem-pasta #btnPasta, body.sem-pasta #btnLimparCache { display: none; }
 
   $("selRef1Top").addEventListener("change", mudouRef);
   $("selRef2Top").addEventListener("change", mudouRef);
-  $("selMesTop").addEventListener("change", (e) => { filtrosEstado.mes = e.target.value; aplicaFiltros(); salvaFiltros(); });
+  $("selMesTop").addEventListener("change", (e) => trocaMes(e.target.value));
   $("btnGrupo").addEventListener("click", (e) => { e.stopPropagation(); $("ddGrupo").classList.toggle("aberto"); });
   document.addEventListener("click", (e) => { if (!e.target.closest("#ddGrupo")) $("ddGrupo").classList.remove("aberto"); });
   $("listaGrupos").addEventListener("change", (e) => {
@@ -1711,6 +1797,21 @@ body.sem-pasta #btnPasta, body.sem-pasta #btnLimparCache { display: none; }
     w.gerarOnePage(await libsPdf());
   });
   // Cortadas com consumo: analítico das ligações cortadas com Consumo Medido > 0, com os filtros da tela
+  // Bases analíticas (aba Dados): o botão abre a lista de bases; o relatório monta o Excel com os filtros da tela
+  const menuBases = $("menuBases");
+  const fechaMenuBases = () => { menuBases.hidden = true; $("btnBases").setAttribute("aria-expanded", "false"); };
+  $("btnBases").addEventListener("click", (e) => {
+    e.stopPropagation();
+    menuBases.hidden = !menuBases.hidden; $("btnBases").setAttribute("aria-expanded", String(!menuBases.hidden));
+  });
+  document.addEventListener("click", (e) => { if (!menuBases.hidden && !e.target.closest("#menuBasesWrap")) fechaMenuBases(); });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !menuBases.hidden) fechaMenuBases(); });
+  menuBases.querySelectorAll("button[data-base]").forEach((b) => b.addEventListener("click", () => {
+    fechaMenuBases();
+    const w = janela();
+    if (!w.baixarBaseAnalitica) { alert("Este relatório foi gerado por uma versão anterior do painel: atualize a análise para baixar as bases analíticas."); return; }
+    w.baixarBaseAnalitica(b.dataset.base);
+  }));
   $("btnCortadas").addEventListener("click", () => {
     const w = janela();
     if (!w.baixarCortadasConsumo) { alert("Este relatório foi gerado por uma versão anterior do painel: atualize a análise para baixar as cortadas com consumo."); return; }
