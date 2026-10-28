@@ -9,7 +9,10 @@ Orçado: planilhas "RF" e "RF SUP" (colunas Sup, Rubrica e um mês por coluna).
 A SUP vem da cidade (Nome da Localidade) -> relação em `regras.json`.
 """
 import html
+import re
 import json
+
+import numpy as np
 
 import pandas as pd
 
@@ -315,12 +318,42 @@ def _sup_orcado(valor):
     return ALIAS_SUP.get(k, k)
 
 
+def _ordem_rf(nome):
+    """RF01T26 -> (2026, 1): o RF mais recente é o de maior (ano, número); nomes fora do padrão ficam por último."""
+    m = re.search(r"RF\s*0*(\d+)\s*T\s*(\d{2,4})", str(nome).upper())
+    if not m:
+        return (0, 0, str(nome))
+    ano = int(m.group(2))
+    return (ano + 2000 if ano < 100 else ano, int(m.group(1)), str(nome))
+
+
+def fonte_substituta(ctx, fonte, ref=None):
+    """Orçado SUP sem nenhum valor no mês: devolve o RF mais recente que tem o mês (a comparação usa ele). Senão None."""
+    ref = ref or ctx.ref_atual
+    info = ctx.orcado.get(fonte)
+    if not info or info["tipo"] != "sup" or (info["dados"]["Referencia"] == ref).any():
+        return None
+    com_mes = [n for n in fontes_rf(ctx) if (ctx.orcado[n]["dados"]["Referencia"] == ref).any()]
+    return max(com_mes, key=_ordem_rf) if com_mes else None
+
+
+def rotulo_fonte(ctx, fonte, ref=None):
+    """Nome da coluna de orçado (HTML): o SUP sem o mês avisa qual RF está no lugar."""
+    sub = fonte_substituta(ctx, fonte, ref)
+    return html.escape(fonte) + (f' <small class="orc-sub" title="Sem orçado SUP neste mês: comparação com o {html.escape(sub)}">'
+                                 f'(= {html.escape(sub)})</small>' if sub else "")
+
+
 def orcado(ctx, fonte, sup, ref=None):
-    """Valores da planilha de orçado `fonte` (ex.: "RF01T26") no mês, por linha. {} se não houver dados."""
+    """Valores da planilha de orçado `fonte` (ex.: "RF01T26") no mês, por linha. {} se não houver dados.
+    O orçado SUP sem o mês usa o RF mais recente que tem o mês (fonte_substituta)."""
     ref = ref or ctx.ref_atual
     info = ctx.orcado.get(fonte)
     if not info:
         return {}
+    sub = fonte_substituta(ctx, fonte, ref)
+    if sub:
+        return orcado(ctx, sub, sup, ref)
     d = info["dados"]
     d = d[d["Referencia"] == ref]
     if sup != TODAS:                       # TODAS soma todas as superintendências da planilha
@@ -413,10 +446,10 @@ def _linha_dre(rotulo, formato, negrito, orc, real, eh_canc, fontes, combos, cla
     return f'<tr class="{"dre-forte" if negrito else classe}">' + "".join(cels) + "</tr>"
 
 
-def _cabecalho(ctx, primeira, fontes, combos):
+def _cabecalho(ctx, primeira, fontes, combos, ref=None):
     e = lambda v: html.escape(v, quote=True)
     ths = [f"<th>{primeira}</th>"]
-    ths += [f'<th data-src="{e(f)}" data-tipo="orc">Orçado<br>{html.escape(f)}</th>' for f in fontes]
+    ths += [f'<th data-src="{e(f)}" data-tipo="orc">Orçado<br>{rotulo_fonte(ctx, f, ref)}</th>' for f in fontes]
     ths.append('<th class="col-real" data-real="1">Realizado</th>')
     for f in fontes:
         ths.append(f'<th data-src="{e(f)}" data-tipo="dreal">Δ %<br>vs {html.escape(f)}</th>'
@@ -443,7 +476,7 @@ def tabela_dre(ctx, sup, ref):
         else:
             linhas.append(_linha_dre(rotulo, formato, negrito, {f: orc[f].get(chave) for f in fontes}, real.get(chave),
                                      chave == "canc", fontes, combos))
-    return ('<div class="tabela-wrap"><table class="tabela-dre">' + _cabecalho(ctx, "Projeto/Linha", fontes, combos)
+    return ('<div class="tabela-wrap"><table class="tabela-dre">' + _cabecalho(ctx, "Projeto/Linha", fontes, combos, ref)
             + "<tbody>" + "".join(linhas) + "</tbody></table></div>")
 
 
@@ -480,13 +513,19 @@ def gera_aba_dre_html(ctx):
 
 # ---------- Indiretas ----------
 def _indiretas_mes(ctx, sup, ref):
-    """{classe: (qtd, valor)} do serviço avulso no mês (sem as rubricas excluídas)."""
+    """{classe: (qtd, valor)} do serviço avulso no mês (sem as rubricas excluídas). A quantidade (eventos) conta ligações
+    distintas por classe: a mesma ligação com várias rubricas na mesma linha do quadro é um evento só; o valor soma tudo."""
     av = _filtra(ctx.avulso, sup)
     if av is None or not len(av) or "Referencia" not in av.columns:
         return {cl: (0, 0.0) for cl in CLASSES_ORDEM}
     av = av[(av["Referencia"] == ref) & (av["Classe"] != "EXCLUIR")]
-    g = av.groupby("Classe")["Valor Parcela"].agg(["size", "sum"])
-    return {cl: (int(g.loc[cl, "size"]), float(g.loc[cl, "sum"])) if cl in g.index else (0, 0.0) for cl in CLASSES_ORDEM}
+    if "N. da Ligacao" in av.columns:                     # sem número da ligação, cada lançamento conta como um evento
+        lig = _ligacao(av["N. da Ligacao"]).where(av["N. da Ligacao"].notna() & (_ligacao(av["N. da Ligacao"]) != ""))
+        lig = lig.fillna(pd.Series("__linha" + av.index.astype(str), index=av.index))
+    else:
+        lig = pd.Series(av.index.astype(str), index=av.index)
+    g = av.assign(__lig=lig).groupby("Classe").agg(qtd=("__lig", "nunique"), valor=("Valor Parcela", "sum"))
+    return {cl: (int(g.loc[cl, "qtd"]), float(g.loc[cl, "valor"])) if cl in g.index else (0, 0.0) for cl in CLASSES_ORDEM}
 
 
 def grafico_evolucao(ctx, sup, ref, meses):
@@ -496,6 +535,48 @@ def grafico_evolucao(ctx, sup, ref, meses):
              "series": [{"classe": NOME_CLASSE[cl], "valores": [round(por_mes[m][cl][1], 2) for m in meses]} for cl in CLASSES_ORDEM]}
     return (f'<div class="grafico-area grafico-indiretas grafico-largo"><canvas class="canvas-indiretas" '
             f'data-dados="{html.escape(json.dumps(dados), quote=True)}" data-mes="{html.escape(nome_mes(ref))}"></canvas></div>')
+
+
+# Analítico do serviço avulso (seta ⬇≡ dos quadros de indiretas): um lançamento por linha, com a classe/linha do quadro em
+# que ele entra, para conferir rubrica × valor faturado. Vai embutido uma vez (CSV em gzip); o navegador filtra mês e SUP.
+LINHA_DO_QUADRO = {"CORTE": "RI Cortes/Recorte", "RELIGAÇÃO": "RI Religações", "LNA": "RI Ligações - Água", "SANÇÃO": "RI Fiscalização",
+                   "OUTROS": "RI Outros - Água", "LNE": "Fat. de esgoto - Indireto (LNE)"}
+
+
+def avulso_analitico(ctx):
+    """DataFrame do analítico: colunas de conferência primeiro, depois as demais colunas do arquivo de serviço avulso."""
+    av = ctx.avulso
+    if av is None or not len(av):
+        return pd.DataFrame()
+    d = pd.DataFrame(index=av.index)
+    d["Referência"] = av["Referencia"]
+    d["Superintendência"] = av["__sup"] if "__sup" in av.columns else ""
+    d["Cidade"] = av["__cidade"] if "__cidade" in av.columns else av.get("Nome da Localidade")
+    for c in ("Grupo", "N. da Ligacao", "Nome Cliente", "Categoria", "Rubrica"):
+        if c in av.columns:
+            d[c] = av[c]
+    classe = av["Classe"].fillna("OUTROS")
+    d["Linha do quadro"] = classe.map(LINHA_DO_QUADRO).fillna("Fora do quadro (rubrica excluída)")
+    d["Entra no quadro"] = np.where(classe == "EXCLUIR", "Não", "Sim")
+    d["Valor faturado (R$)"] = pd.to_numeric(av["Valor Parcela"], errors="coerce").round(2)
+    ja = {"Referencia", "Classe", "Valor Parcela", "Nome da Localidade", *d.columns}
+    for c in av.columns:                                    # o resto do arquivo (endereço, vencimento, situação, ...)
+        if c not in ja and not str(c).startswith("__"):
+            d[c] = av[c]
+    return d.reset_index(drop=True)
+
+
+def avulso_dl_html(ctx):
+    from .situacao_lancamento import _csv_gz_b64
+    d = avulso_analitico(ctx)
+    return f'<script type="application/octet-stream" id="avulso-dl" data-gz="1">{_csv_gz_b64(d)}</script>' if len(d) else ""
+
+
+def seta_avulso(sup, ref):
+    e = lambda v: html.escape(str(v), quote=True)
+    dica = "Baixar os lançamentos do serviço avulso deste quadro (Excel): rubrica, linha do quadro, valor faturado e os dados do lançamento"
+    return (f' <button type="button" class="btn-just btn-avulso-dl" data-ref="{e(ref)}" data-sup="{e(sup)}" '
+            f'title="{e(dica)}" aria-label="{e(dica)}">&#11015;&#8801;</button>')
 
 
 def gera_aba_indiretas_html(ctx):
@@ -513,7 +594,8 @@ def gera_aba_indiretas_html(ctx):
                      'onclick="previsaoRestaurar(this)">↺ Restaurar automático</button>'
                      '<button type="button" class="btn-just btn-prev-toggle" onclick="previsaoAlternar(this)">Ocultar forecast</button>'
                      '</span>') if no_mes else ""
-            fc = (" <b>Clique em um valor da coluna Forecast ✎ para editar.</b>" if no_mes
+            fc = ((" <b>Clique em um valor da coluna Forecast ✎ para editar</b>, ou digite em Realizado + Forecast o valor que quer "
+                   "fechar (meta 🎯): o forecast é calculado sozinho. ↺ ao lado da rubrica restaura só a linha.") if no_mes
                   else " Mês fechado: o fechamento é o próprio realizado (sem forecast).")
             meses_tk = ", ".join(nome_mes(m) for m in ev["meses_ticket"])
             arq_ev = sorted(set(ctx.orcado_eventos.loc[ctx.orcado_eventos["Referencia"] == ref, "Arquivo"])) \
@@ -522,16 +604,16 @@ def gera_aba_indiretas_html(ctx):
                        if arq_ev else "")
             blocos.append(_bloco(sup, ref, (
                 (f'<div class="card">{painel_dias_uteis_html(ref, data_corte(ctx))}</div>' if no_mes else "") +
-                f'<div class="card prev-card"><h2 class="prev-titulo">Indiretas — financeiro (R$) — {nome} — {nome_mes(ref)}{acoes}</h2>'
+                f'<div class="card prev-card"><h2 class="prev-titulo">Indiretas — financeiro (R$) — {nome} — {nome_mes(ref)}{seta_avulso(sup, ref)}{acoes}</h2>'
                 '<p class="nota-secao prev-nota">Realizado = valor do serviço avulso do mês até D-1, por classe. Forecast = o mesmo da aba '
                 'Forecast (ritmo por dia útil × dias úteis que faltam; Cortes pelos dias de corte) — editar aqui muda lá também.'
                 f'{fc}</p>{fin}</div>'
-                f'<div class="card prev-card"><h2 class="prev-titulo">Indiretas — eventos faturados — {nome} — {nome_mes(ref)}{acoes}</h2>'
+                f'<div class="card prev-card"><h2 class="prev-titulo">Indiretas — eventos faturados — {nome} — {nome_mes(ref)}{seta_avulso(sup, ref)}{acoes}</h2>'
                 f'<p class="nota-secao prev-nota">Eventos = quantidade de lançamentos do serviço avulso. Orçado em eventos = orçado (R$) ÷ '
                 f'ticket médio da classe nos 3 meses fechados anteriores ({meses_tk}){nota_ev}. Forecast = eventos até D-1 ÷ dias úteis '
                 f'decorridos × dias úteis que faltam (Cortes pelos dias de corte).{fc}</p>{eventos}</div>'
                 f'<div class="card"><h2>Evolução mensal por classe — {nome}</h2>{grafico_evolucao(ctx, sup, ref, meses_av)}</div>')))
-    return "".join(blocos)
+    return "".join(blocos) + avulso_dl_html(ctx)
 
 
 def opcoes_referencia(ctx):
