@@ -5,6 +5,8 @@
     "VALOR DE ESGOTO"
   ],
   "situacao_conta_em_analise": "EM ANALISE",
+  "_comentario_sup_do_painel": "Superintendência deste painel: as linhas do cronograma de outras SUPs (pela coluna Localidade) ficam de fora. Vazio (\"\") = todas.",
+  "sup_do_painel": "LESTE",
   "consumo_minimo_por_categoria": {
     "COMERCIAL": 20,
     "PEQ. COMERCIO": 10,

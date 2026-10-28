@@ -18,6 +18,7 @@ EXTENSOES_VALIDAS = (".csv", ".xlsx", ".xls")
 COLUNAS_CONSUMO = {"Leitura Atual", "Consumo Medido", "Consumo Faturado"}
 COLUNAS_FATURA = {"Rubrica", "Valor Parcela", "Data de Vencimento"}
 COLUNAS_CRONOGRAMA = {"Grupo", "Data da Leitura", "Qts. Dias"}
+COLUNAS_CRONOGRAMA_MIN = {"Grupo", "Data da Leitura"}      # sem Qts. Dias: os dias saem da diferença entre as leituras
 
 # Nomes aceitos para a coluna do nº da ligação
 NOMES_LIGACAO = ["N. Ligacao", "N. da Ligacao", "N Ligacao", "N. da Ligação", "N. Ligação"]
