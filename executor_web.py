@@ -51,12 +51,13 @@ def grandes_clientes_dados(lista_json):
     return json.dumps(dados_gc(_estado["sessao"].ctx, json.loads(lista_json or "[]")), ensure_ascii=False)
 
 
-def acompanhamento(sup, fotos_json, caminho):
+def acompanhamento(sup, fotos_json, caminho, ref=None, orcados_json=None):
     """Export "Acompanhamento Mensal" (botão do site): grava o .xlsx em `caminho` e devolve JSON com o nome do arquivo
     e a "foto" do realizado acumulado das indiretas, que o site guarda no ajustes_relatorio.json para o próximo export."""
     from faturamento.acompanhamento import dados_acompanhamento, gera_xlsx, nome_arquivo
-    ctx = _estado["sessao"].ctx
-    dados = dados_acompanhamento(ctx, sup or "TODAS")
+    ctx = _estado["sessao"].contexto_do_mes(ref or None)      # o mês que está na tela (None = o mais recente)
+    orc = json.loads(orcados_json or "{}")                    # orçados escolhidos no botão (vazio = os padrões)
+    dados = dados_acompanhamento(ctx, sup or "TODAS", orc.get("ciclo") or None, orc.get("indiretas") or None)
     conteudo, foto = gera_xlsx(dados, json.loads(fotos_json or "[]"))
     with open(caminho, "wb") as f:
         f.write(conteudo)

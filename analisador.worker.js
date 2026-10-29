@@ -55,6 +55,9 @@ async function preparaPython() {
     FS.mkdirTree(destino.substring(0, destino.lastIndexOf("/")));
     FS.writeFile(destino, new Uint8Array(await resp.arrayBuffer()));
   }
+  // painel deste site (nome do repositório no endereço): o Python escolhe a SUP do painel em regras.json ("paineis")
+  const painel = new URL(self.location.href).searchParams.get("painel") || "";
+  pyodide.runPython(`import os; os.environ["FATURAMENTO_PAINEL"] = ${JSON.stringify(painel)}`);
   const executor = await (await fetch("executor_web.py", { cache: "no-cache" })).text();
   pyodide.runPython(executor);
   return pyodide;
@@ -272,11 +275,11 @@ async function faseContinuar(ajustes, ref) {
 }
 
 // Export "Acompanhamento Mensal" (botão do site): usa a análise que já está carregada aqui
-async function faseAcompanhamento(sup, fotos) {
+async function faseAcompanhamento(sup, fotos, ref, orcados) {
   const pyodide = await iniciaPyodide();
   const caminho = "/tmp/acompanhamento.xlsx";
   const acomp = pyodide.globals.get("acompanhamento");
-  const info = JSON.parse(acomp(sup || "TODAS", JSON.stringify(fotos || []), caminho));
+  const info = JSON.parse(acomp(sup || "TODAS", JSON.stringify(fotos || []), caminho, ref || null, JSON.stringify(orcados || {})));
   acomp.destroy();
   const bytes = pyodide.FS.readFile(caminho);
   avisa("acompanhamento", { info, conteudo: bytes.buffer }, [bytes.buffer]);
@@ -304,7 +307,7 @@ async function faseGCDados(lista) {
 self.onmessage = async (evento) => {
   const { fase, arquivos, ajustes } = evento.data;
   if (fase === "acompanhamento") {
-    try { await faseAcompanhamento(evento.data.sup, evento.data.fotos); }
+    try { await faseAcompanhamento(evento.data.sup, evento.data.fotos, evento.data.ref, evento.data.orcados); }
     catch (erro) { avisa("acompanhamentoErro", { motivo: String((erro && erro.message) || erro).split("\n").slice(-3).join(" ") }); }
     return;
   }
