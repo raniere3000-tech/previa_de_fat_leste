@@ -1579,6 +1579,8 @@ function gerarExecutivo(libs, modo) {
         });
         c.querySelectorAll('script').forEach(x => x.remove());          // só o conteúdo: nada roda no documento do PDF
         c.querySelectorAll('.dias-uteis').forEach(x => x.remove());     // no PDF vai só a tabela do forecast (sem o painel de dias úteis)
+        // no PDF a coluna Forecast sai sempre (DRE - Forecast e Indiretas): fica Realizado + Forecast, como no "Ocultar forecast"
+        c.querySelectorAll('table.tabela-previsao').forEach(t => t.classList.add('prev-sem-forecast'));
         c.querySelectorAll('[contenteditable]').forEach(x => x.removeAttribute('contenteditable'));
         c.querySelectorAll('.jg-col').forEach((col) => { const t = col.querySelector('.jg-txt'); if (t && !t.textContent.trim()) col.remove(); });
         c.querySelectorAll('.jg').forEach((b) => { const n = b.querySelectorAll('.jg-col').length; if (!n) b.remove(); else if (n === 1) b.querySelector('.jg-cols').classList.add('um'); });
@@ -2967,14 +2969,25 @@ function planoDesenhar() {
         return true;
     });
     tab.tHead.innerHTML = '<tr>' + cols.map((c) => `<th>${garEsc(c)}</th>`).join('') + '</tr>';
-    tab.tBodies[0].innerHTML = linhas.map((l) => {
+    planoVisiveis = linhas;
+    const span = planoSpans(plano, linhas);              // células mescladas na planilha (só entre as linhas que aparecem)
+    // cor alternada por bloco: as linhas ligadas por uma célula mesclada (rowspan) ficam todas com a mesma cor
+    const fimBloco = linhas.map((_, r) => r);
+    span.forEach((lin, r) => lin.forEach((sp) => { if (sp && sp.rs > 1) fimBloco[r] = Math.max(fimBloco[r], r + sp.rs - 1); }));
+    const zebra = []; let cor = 0, ate = -1;
+    linhas.forEach((_, r) => { if (r > ate) { cor = 1 - cor; } ate = Math.max(ate, fimBloco[r]); zebra[r] = cor ? 'pl-z1' : 'pl-z2'; });
+    tab.tBodies[0].innerHTML = linhas.map((l, r) => {
         const st = iStatus >= 0 ? planoClasseStatus(l[iStatus]) : '';
         const prazo = iPrazo >= 0 ? planoDataDe(l[iPrazo]) : null, vencido = prazo && prazo < hoje && st !== 'pl-ok' && st !== 'pl-cancel';
-        return '<tr>' + cols.map((c, i) => {
+        return `<tr class="${zebra[r]}">` + cols.map((c, i) => {
+            const sp = span[r][i];
+            if (sp === 0) return '';                     // coberta por uma célula mesclada
+            const at = (sp && sp.rs > 1 ? ` rowspan="${sp.rs}"` : '') + (sp && sp.cs > 1 ? ` colspan="${sp.cs}"` : '')
+                + (sp && (sp.rs > 1 || sp.cs > 1) ? ' class="pl-mescla"' : '');
             const v = l[i] == null ? '' : String(l[i]);
-            if (i === iStatus && v) return `<td><span class="pl-status ${st}">${garEsc(v)}</span></td>`;
-            if (i === iPrazo && vencido) return `<td class="pl-vencido" title="Prazo vencido">${garEsc(v)}</td>`;
-            return `<td>${garEsc(v).replace(/\n/g, '<br>')}</td>`;
+            if (i === iStatus && v) return `<td${at}><span class="pl-status ${st}">${garEsc(v)}</span></td>`;
+            if (i === iPrazo && vencido) return `<td${at.replace(' class="pl-mescla"', '')} class="pl-vencido${at.includes('pl-mescla') ? ' pl-mescla' : ''}" title="Prazo vencido">${garEsc(v)}</td>`;
+            return `<td${at}>${garEsc(v).replace(/\n/g, '<br>')}</td>`;
         }).join('') + '</tr>';
     }).join('') || `<tr><td colspan="${cols.length}" class="gar-vazio">Nenhuma ação para os filtros escolhidos.</td></tr>`;
     const quando = plano.atualizado ? new Date(plano.atualizado).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }) : '';
@@ -2990,25 +3003,76 @@ function planoDesenhar() {
         + (quando ? ` · colado em ${quando}` : '') + (outro ? ` · <b>plano de ${garEsc(ref)}</b> (o mês atual ainda não tem plano colado)` : '');
     card.classList.toggle('tem-dados', linhas.length > 0);
 }
-function planoImportar(texto) {
-    const tab = garLerTSV(texto).map((l) => l.map((c) => String(c == null ? '' : c).trim()));
-    const linhas = tab.filter((l) => l.some((c) => c !== ''));
+// Células mescladas: o Excel copia junto uma versão HTML da seleção, com rowspan/colspan. Dela sai a grade com o valor da
+// célula mesclada repetido em todas as linhas que ela cobre (filtros e PDF continuam certos) e a lista das mesclas
+// [linha, coluna, linhas, colunas], refeita na tela (planoSpans). Sem HTML (outro programa), vale o texto (TSV).
+function planoLerHtml(html) {
+    const doc = new DOMParser().parseFromString(html, 'text/html'), t = doc.querySelector('table');
+    if (!t) return null;
+    const grade = [], mesclas = [], texto = (td) => {
+        const c = td.cloneNode(true); c.querySelectorAll('br').forEach((b) => b.replaceWith('\n'));
+        return c.textContent.replace(/\u00a0/g, ' ').split('\n').map((x) => x.replace(/[ \t\r]+/g, ' ').trim()).filter(Boolean).join('\n');
+    };
+    const visivel = (el) => !/display\s*:\s*none/i.test(el.getAttribute('style') || '');
+    Array.from(t.rows).filter(visivel).forEach((tr, r) => {
+        grade[r] = grade[r] || [];
+        let c = 0;
+        Array.from(tr.cells).filter(visivel).forEach((td) => {
+            while (grade[r][c] !== undefined) c++;
+            const rs = Math.max(1, +td.rowSpan || 1), cs = Math.max(1, +td.colSpan || 1), v = texto(td);
+            for (let i = 0; i < rs; i++) for (let j = 0; j < cs; j++) (grade[r + i] = grade[r + i] || [])[c + j] = v;
+            if (rs > 1 || cs > 1) mesclas.push([r, c, rs, cs]);
+            c += cs;
+        });
+    });
+    const n = Math.max(0, ...grade.map((l) => l.length));
+    return { grade: grade.map((l) => Array.from({ length: n }, (_, i) => (l[i] == null ? '' : l[i]))), mesclas };
+}
+// spans para desenhar: {rs, cs} na célula que começa a mescla, 0 nas cobertas, null nas normais — só entre as linhas visíveis
+function planoSpans(plano, linhas) {
+    const pos = new Map(linhas.map((l, r) => [l, r])), sp = linhas.map((l) => l.map(() => null));
+    (plano.mesclas || []).forEach(([r0, c0, rs, cs]) => {
+        const vis = []; for (let r = r0; r < r0 + rs; r++) { const l = plano.linhas[r]; if (l && pos.has(l)) vis.push(pos.get(l)); }
+        if (!vis.length || (vis.length < 2 && cs < 2)) return;
+        vis.forEach((r, k) => { for (let j = 0; j < cs; j++) if (c0 + j < sp[r].length) sp[r][c0 + j] = 0; });
+        sp[vis[0]][c0] = { rs: vis.length, cs: Math.min(cs, sp[vis[0]].length - c0) };
+    });
+    return sp;
+}
+let planoVisiveis = [];
+function planoImportar(texto, html) {
+    const lido = html ? planoLerHtml(html) : null;
+    const tab = (lido ? lido.grade : garLerTSV(texto)).map((l) => l.map((c) => String(c == null ? '' : c).trim()));
+    const idxLinhas = tab.map((l, i) => (l.some((c) => c !== '') ? i : -1)).filter((i) => i >= 0);
+    const linhas = idxLinhas.map((i) => tab[i]);
     if (linhas.length < 2) { avisoNuvem('Cole as linhas da planilha com o cabeçalho (pelo menos o cabeçalho e uma linha).', true); return; }
     let cab = linhas[0];
     const usadas = cab.map((c, i) => c !== '' || linhas.slice(1).some((l) => (l[i] || '') !== ''));   // tira colunas vazias
     const pega = (l) => cab.map((_, i) => l[i] || '').filter((_, i) => usadas[i]);
     const colunas = pega(cab).map((c, i) => c || `Coluna ${i + 1}`), corpo = linhas.slice(1).map(pega);
+    // mesclas no corpo, com linhas e colunas renumeradas (sem o cabeçalho, as linhas vazias e as colunas vazias)
+    const novaLinha = new Map(idxLinhas.slice(1).map((i, k) => [i, k])), novaCol = [];
+    usadas.forEach((u, i) => { novaCol[i] = u ? novaCol.filter((x) => x >= 0).length : -1; });
+    const mesclas = [];
+    (lido ? lido.mesclas : []).forEach(([r, c, rs, cs]) => {
+        const rsN = Array.from({ length: rs }, (_, k) => novaLinha.get(r + k)).filter((x) => x !== undefined);
+        const csN = Array.from({ length: cs }, (_, k) => novaCol[c + k]).filter((x) => x !== undefined && x >= 0);
+        if (rsN.length && csN.length && (rsN.length > 1 || csN.length > 1)) mesclas.push([rsN[0], csN[0], rsN.length, csN.length]);
+    });
     const inf = planoInfo();
     const ja = planoMapa[inf.ref] && (planoMapa[inf.ref].linhas || []).length;
-    if (!confirm(`${ja ? 'Substituir' : 'Salvar'} o plano de ação de ${inf.mes} por ${corpo.length} linha(s) e ${colunas.length} coluna(s)?\n\nColunas: ${colunas.join(' · ')}`)) return;
+    if (!confirm(`${ja ? 'Substituir' : 'Salvar'} o plano de ação de ${inf.mes} por ${corpo.length} linha(s) e ${colunas.length} coluna(s)?`
+        + (mesclas.length ? `\n${mesclas.length} célula(s) mesclada(s) reconhecida(s).` : '') + `\n\nColunas: ${colunas.join(' · ')}`)) return;
     planoMapa[inf.ref] = { colunas, linhas: corpo, atualizado: new Date().toISOString() };
+    if (mesclas.length) planoMapa[inf.ref].mesclas = mesclas;
     planoSalvar(); planoDesenhar();
     const msg = document.getElementById('planoMsg'); if (msg) msg.textContent = `${corpo.length} linha(s) coladas.`;
 }
 document.addEventListener('paste', (e) => {
     if (e.target.id !== 'planoColar') return;
     e.preventDefault();
-    planoImportar((e.clipboardData || window.clipboardData).getData('text'));
+    const cb = e.clipboardData || window.clipboardData;
+    planoImportar(cb.getData('text'), cb.getData && /<table/i.test(cb.getData('text/html') || '') ? cb.getData('text/html') : null);
     e.target.value = '';
 });
 document.addEventListener('click', (e) => {
@@ -3020,9 +3084,8 @@ document.addEventListener('click', (e) => {
     }
     if (e.target.id === 'planoBaixar') {
         const [ref, plano] = planoAtual(); if (!plano) return;
-        const t = document.getElementById('planoTabela');
-        const linhas = Array.from(t.tBodies[0].rows).filter((r) => !r.querySelector('.gar-vazio')).map((r) => Array.from(r.cells).map((c) => c.innerText));
-        baixarPlanilha(plano.colunas, linhas, `Plano_de_acao_${String(ref).replace('/', '-')}.csv`);
+        // as linhas na tela, com o valor da célula mesclada em cada linha que ela cobre
+        baixarPlanilha(plano.colunas, planoVisiveis.map((l) => plano.colunas.map((_, i) => (l[i] == null ? '' : String(l[i])))), `Plano_de_acao_${String(ref).replace('/', '-')}.csv`);
     }
 });
 var syncPlano = criaSync('plano', 'Plano de ação', () => planoMapa,
@@ -3282,7 +3345,8 @@ function opGrupos(D) {
 }
 function opBlocoGrupos(D, G) {
     if (!G.grupos.length) return '<p class="op-vazio">Nenhum grupo marcado.</p>';
-    if (opSemanasAbertas === null) { const ult = G.semanas.filter((s) => s.n !== 99).pop(); opSemanasAbertas = new Set(ult ? [ult.n] : []); }
+    // ao abrir: as duas últimas semanas já vêm abertas (o clique na semana abre/fecha as outras)
+    if (opSemanasAbertas === null) opSemanasAbertas = new Set(G.semanas.filter((s) => s.n !== 99).slice(-2).map((s) => s.n));
     const v = (x) => opMoeda(x, 2);
     const cols = (o) => `<td class="num op-forte">${v(o.r)}</td>`
         + `<td class="num op-col-val op-apagado">${o.o != null ? v(o.o) : '–'}</td><td class="num">${o.o != null ? opSeta(opVar(o.r, o.o), '') : '–'}</td>`
@@ -3356,14 +3420,17 @@ const opLig = (v) => String(v == null ? '' : v).trim().replace(/\.0+$/, '');
 function opTop5(D, tipo) {
     const chave = `${tipo}-agua`, d = lerJson('top100-dados');
     const tirar5 = (itens) => itens.sort((a, b) => b.v - a.v).slice(0, 5);
+    const pctFat = (at, ant) => (ant > 0 && at != null && isFinite(at) ? at / ant - 1 : null);   // faturamento do mês contra o anterior
     if (d && d[chave]) {
         // as mesmas linhas da tabela Top 100 da aba Análise (SUP e grupos marcados); com a chave, as em análise saem antes do corte de 100
         const cols = d[chave].columns, ix = (n) => cols.indexOf(n), iSup = ix('Superintendência'), iG = ix('Grupo'), iL = ix('N. Ligação'),
             iN = ix('Nome_Cliente'), iV = ix((tipo === 'aumento' ? 'Aumento' : 'Queda') + '_Valor_R$'), grupos = gruposFiltro();
+        const iVals = cols.map((c, i) => (/^Valor R\$ /.test(c) ? i : -1)).filter((i) => i >= 0), [iAt, iAnt] = iVals;   // atual, anterior
         const liberada = (l) => !opSoLiberadas || !garEmAnalise(GAR.porLig.get(opLig(l[iL])));
         const linhas = d[chave].data.filter((l) => (D.sup === 'TODAS' || iSup < 0 || l[iSup] === D.sup) && (!grupos || grupos.has(normGrupo(l[iG]))) && liberada(l))
             .slice(0, 100);
-        return tirar5(linhas.map((l) => ({ nome: String(l[iN] == null ? '' : l[iN]).trim(), grupo: iG >= 0 ? normGrupo(l[iG]) : '', v: Math.abs(+l[iV] || 0) })));
+        return tirar5(linhas.map((l) => ({ nome: String(l[iN] == null ? '' : l[iN]).trim(), grupo: iG >= 0 ? normGrupo(l[iG]) : '', v: Math.abs(+l[iV] || 0),
+            pct: iAnt === undefined ? null : pctFat(+l[iAt], +l[iAnt]) })));
     }
     const t = document.querySelector(`#view-analise .sup-top-bloco[data-sup="${D.sup}"] table[data-top="${chave}"]`)
         || document.querySelector(`.sup-top-bloco[data-sup="${D.sup}"] table[data-top="${chave}"]`)
@@ -3372,15 +3439,23 @@ function opTop5(D, tipo) {
     const cab = Array.from(t.tHead.rows[0].cells).map((c) => planoNorm(c.textContent));
     const iNome = cab.findIndex((c) => /NOME/.test(c)), iGrupo = cab.findIndex((c) => /^GRUPO/.test(c)), iVal = cab.length - 1,
         iLig = cab.findIndex((c) => /LIGA/.test(c));
+    const iVals = cab.map((c, i) => (/^VALOR R\$ /.test(c) ? i : -1)).filter((i) => i >= 0), [iAt, iAnt] = iVals;
     return tirar5(Array.from(t.tBodies[0].rows).filter((tr) => tr.style.display !== 'none' && tr.cells.length === cab.length)
         .filter((tr) => !opSoLiberadas || iLig < 0 || !garEmAnalise(GAR.porLig.get(opLig(tr.cells[iLig].textContent))))
-        .map((tr) => ({ nome: tr.cells[iNome].textContent.trim(), grupo: iGrupo >= 0 ? tr.cells[iGrupo].textContent.trim() : '', v: Math.abs(opNum(tr.cells[iVal].textContent) || 0) })));
+        .map((tr) => ({ nome: tr.cells[iNome].textContent.trim(), grupo: iGrupo >= 0 ? tr.cells[iGrupo].textContent.trim() : '', v: Math.abs(opNum(tr.cells[iVal].textContent) || 0),
+            pct: iAnt === undefined ? null : pctFat(opNum(tr.cells[iAt].textContent), opNum(tr.cells[iAnt].textContent)) })));
+}
+// % do faturamento do cliente contra o mês anterior, ao lado do valor (sem faturamento no mês anterior: "novo")
+function opTopPct(p) {
+    if (p == null) return '<span class="op-top-pct op-top-novo" title="Sem faturamento no mês anterior">novo</span>';
+    const t = (p > 0 ? '+' : '') + (p * 100).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + '%';
+    return `<span class="op-top-pct ${p < 0 ? 'neg' : 'pos'}" title="Faturamento do cliente contra o mês anterior">${t}</span>`;
 }
 function opBlocoTop(D) {
     // o nome comprido quebra linha; o grupo e o valor ficam sempre inteiros, em colunas fixas
     const lista = (tit, cls, itens) => `<div class="op-top ${cls}"><div class="op-top-tit">${tit}</div>`
         + (itens.length ? itens.map((x, i) => `<div class="op-top-lin"><span class="op-top-nome" title="${garEsc(x.nome)}">${i + 1}. ${garEsc(x.nome)}</span>`
-            + `<span class="op-top-grupo">${x.grupo ? `Grupo ${garEsc(x.grupo)}` : ''}</span><b>${opMoeda(x.v, 2)}</b></div>`).join('')
+            + `<span class="op-top-grupo">${x.grupo ? `Grupo ${garEsc(x.grupo)}` : ''}</span><b>${opMoeda(x.v, 2)}</b>${opTopPct(x.pct)}</div>`).join('')
             : `<p class="op-vazio">${opSoLiberadas && !GAR.dados ? 'Carregando as matrículas…' : 'Sem clientes.'}</p>`) + '</div>';
     const m = opMesCurto((opEditor() || { dataset: {} }).dataset.ref || '');
     return `<div class="op-tops">${lista('Maiores aumentos de faturamento — ' + garEsc(m), 'op-top-pos', opTop5(D, 'aumento'))}`
