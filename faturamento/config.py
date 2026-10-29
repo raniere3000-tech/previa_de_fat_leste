@@ -12,6 +12,22 @@ _DIR = os.path.dirname(os.path.abspath(__file__))
 with open(os.path.join(_DIR, "regras.json"), encoding="utf-8") as _f:
     REGRAS = json.load(_f)
 
+
+def painel_atual():
+    """Nome do painel: no site, o repositório do endereço (o worker grava em FATURAMENTO_PAINEL); no PC/Colab, a pasta
+    do repositório clonado ("previa_de_fat_leste", "previa_de_fat_leste-main"...). Os dois repositórios têm os mesmos
+    arquivos: só o painel muda as configurações de `REGRAS["paineis"]`."""
+    nome = os.environ.get("FATURAMENTO_PAINEL") or os.path.basename(os.path.dirname(_DIR))
+    nome = nome.strip().lower()
+    for chave in REGRAS.get("paineis", {}):
+        if nome == chave or nome.startswith(chave + "-"):
+            return chave
+    return nome
+
+
+PAINEL = painel_atual()
+REGRAS.update(REGRAS.get("paineis", {}).get(PAINEL, {}))     # ex.: Leste → sup_do_painel = "LESTE"
+
 EXTENSOES_VALIDAS = (".csv", ".xlsx", ".xls")
 
 # Colunas que identificam cada tipo de arquivo

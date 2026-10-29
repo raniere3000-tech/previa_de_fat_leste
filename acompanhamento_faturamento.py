@@ -9,8 +9,9 @@ ORIGEM DOS ARQUIVOS (ajuste MODO_ORIGEM abaixo ou use --modo):
   "local"  → (PC) abre a janela para selecionar a pasta
 
 Uso no PC:      python acompanhamento_faturamento.py            (ou --pasta CAMINHO)
-Uso no Colab:   !git clone https://github.com/raniere3000-tech/previa_de_fat_leste
-                %cd previa_de_fat_leste
+Uso no Colab:   !git clone https://github.com/raniere3000-tech/analise-faturamento-agua-esgoto
+                %cd analise-faturamento-agua-esgoto
+                (painel da Leste: troque pelo repositório previa_de_fat_leste — o nome da pasta escolhe o painel)
                 !pip install -q xlsxwriter
                 %run acompanhamento_faturamento.py
 """

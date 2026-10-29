@@ -1,15 +1,14 @@
-name: Avisar alterações do painel original
+name: Conferir se os dois repositórios estão iguais
 
-# Verifica se o painel original (analise-faturamento-agua-esgoto) recebeu commits
-# que ainda não foram replicados aqui. Mantém uma única issue aberta com a lista;
-# fecha a issue quando tudo estiver replicado. Não altera nenhum arquivo.
+# Desde a v2.0, analise-faturamento-agua-esgoto e previa_de_fat_leste têm os MESMOS arquivos (ver CLAUDE.md).
+# Este workflow compara os dois (fora .git e .github). Se houver diferença, mantém uma única issue aberta com os
+# arquivos diferentes e a versão de cada lado; quando ficarem iguais, fecha a issue. Não altera nenhum arquivo.
 
 on:
   schedule:
     - cron: '41 */2 * * *'   # a cada 2 horas
   push:
     branches: [main]
-    paths: ['.github/replicacao-original.txt']
   workflow_dispatch:
 
 concurrency:
@@ -21,57 +20,58 @@ permissions:
   issues: write
 
 jobs:
-  verificar:
+  conferir:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          path: leste
 
-      - name: Comparar com o painel original
+      - name: Comparar com o repositório original
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
           ORIGINAL: raniere3000-tech/analise-faturamento-agua-esgoto
           ROTULO: replicar-original
         run: |
           set -eu
-          BASE=$(grep -m1 -oE '^[0-9a-f]{7,40}' .github/replicacao-original.txt)
-          git clone --quiet --filter=blob:none --no-checkout "https://github.com/$ORIGINAL.git" original
-          cd original
+          git clone --quiet --depth 1 "https://github.com/$ORIGINAL.git" original
+          versao() { grep -oE 'const VERSAO_SITE = "v[0-9.]+' "$1/index.html" | grep -oE 'v[0-9.]+$' || echo "?"; }
+          V_ORIG=$(versao original); V_LESTE=$(versao leste)
 
-          if ! git merge-base --is-ancestor "$BASE" origin/main; then
-            echo "::error::O commit $BASE de .github/replicacao-original.txt não está na main do original."
-            exit 1
-          fi
-
-          LISTA=$(git log --no-merges --reverse --format="- [ ] [\`%h\`](https://github.com/$ORIGINAL/commit/%H) %s" "$BASE..origin/main")
-          QTD=$(git rev-list --no-merges --count "$BASE..origin/main")
-          cd ..
-
+          DIFS=$(diff -rq --exclude=.git --exclude=.github original leste \
+                   | sed -E 's#^Files original/(.*) and leste/.* differ$#- `\1` (diferente)#; s#^Only in original(/?)(.*): (.*)$#- `\2\1\3` (só no original)#; s#^Only in leste(/?)(.*): (.*)$#- `\2\1\3` (só na Leste)#' \
+                   | sed 's#``/#`#' || true)
+          QTD=$(printf '%s' "$DIFS" | grep -c . || true)
           ISSUE=$(gh issue list --label "$ROTULO" --state open --json number --jq '.[0].number // empty')
 
           if [ "$QTD" -eq 0 ]; then
-            echo "✔ Tudo replicado (até $BASE)."
+            echo "✔ Iguais ($V_ORIG)."
             if [ -n "$ISSUE" ]; then
-              gh issue close "$ISSUE" --comment "Tudo replicado até \`${BASE:0:7}\`. Fechando automaticamente."
+              gh issue close "$ISSUE" --comment "Os dois repositórios estão iguais de novo ($V_ORIG). Fechando automaticamente."
             fi
             exit 0
           fi
 
-          TITULO="Replicar $QTD alteração(ões) do painel original"
+          TITULO="Repositórios diferentes: original $V_ORIG × Leste $V_LESTE ($QTD arquivo(s))"
           {
-            echo "O painel original ([$ORIGINAL](https://github.com/$ORIGINAL)) tem **$QTD** commit(s) ainda não replicado(s) aqui:"
+            echo "Pela regra do CLAUDE.md, os dois repositórios devem ter os mesmos arquivos e a mesma versão."
             echo
-            echo "$LISTA"
+            echo "- Original ([$ORIGINAL](https://github.com/$ORIGINAL)): **$V_ORIG**"
+            echo "- Leste (este repositório): **$V_LESTE**"
             echo
-            echo "Último replicado: \`${BASE:0:7}\` (arquivo \`.github/replicacao-original.txt\`)."
+            echo "Arquivos diferentes:"
             echo
-            echo "**Depois de replicar**, troque a primeira linha de \`.github/replicacao-original.txt\` pelo hash completo do último commit replicado. Esta issue se atualiza ou fecha sozinha."
+            echo "$DIFS"
+            echo
+            echo "Leve a alteração que falta para o outro repositório (mesma versão). Esta issue se atualiza ou fecha sozinha."
           } > corpo.md
 
           if [ -n "$ISSUE" ]; then
-            echo "↻ Atualizando issue #$ISSUE ($QTD pendentes)"
+            echo "↻ Atualizando issue #$ISSUE ($QTD arquivos)"
             gh issue edit "$ISSUE" --title "$TITULO" --body-file corpo.md
           else
-            echo "＋ Abrindo issue ($QTD pendentes)"
-            gh label create "$ROTULO" --color FBCA04 --description "Alterações do painel original a replicar" --force
+            echo "＋ Abrindo issue ($QTD arquivos)"
+            gh label create "$ROTULO" --color FBCA04 --description "Repositórios fora de sincronia" --force
             gh issue create --title "$TITULO" --body-file corpo.md --label "$ROTULO"
           fi

@@ -253,6 +253,10 @@ body { background: var(--bg); color: var(--ink); font-family: "Segoe UI", Arial,
 .menu-pdf-lista { position: absolute; right: 0; top: 100%; margin-top: 6px; z-index: 40; background: #fff; border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 8px 22px rgba(17,42,66,.18); padding: 6px 0; min-width: 250px; }
 .menu-pdf-lista[hidden] { display: none; }
 #menuBases { min-width: 340px; left: 0; right: auto; }
+#menuAcomp { min-width: 330px; }
+.acomp-opcoes { display: block; padding: 6px 14px 10px; border-bottom: 1px solid var(--line); margin-bottom: 4px; }
+.acomp-opcoes label { display: flex; flex-direction: column; gap: 3px; font-size: 12px; font-weight: 600; color: var(--ink); margin-bottom: 8px; }
+.acomp-opcoes select { font: inherit; font-weight: 400; font-size: 13px; padding: 5px 6px; border: 1px solid var(--line); border-radius: 6px; color: #111; background: #fff; }
 .menu-pdf-lista button { display: block; width: 100%; text-align: left; border: 0; background: transparent; color: var(--ink); font: inherit; font-size: 13.5px; font-weight: 600; padding: 9px 14px; cursor: pointer; }
 .menu-pdf-lista button:hover, .menu-pdf-lista button:focus-visible { background: #f2f8fc; outline: none; }
 .menu-pdf-lista small { display: block; font-weight: 400; font-size: 11.5px; color: #5b6b80; margin-top: 2px; }
@@ -421,7 +425,7 @@ body.sem-pasta #btnPasta, body.sem-pasta #btnLimparCache { display: none; }
 <header class="top">
   <div class="top-linha">
     <div>
-      <div class="eyebrow">Águas do Rio • Relatório Executivo <span class="versao-nuvem"><span class="versao" id="versao">v123</span><button type="button" class="nuvem nuvem-erro" id="nuvem" title="Sem pasta conectada: as alterações ficam só neste navegador" aria-label="Situação do salvamento na nuvem"></button></span></div>
+      <div class="eyebrow">Águas do Rio • Relatório Executivo <span class="versao-nuvem"><span class="versao" id="versao">v2.0</span><button type="button" class="nuvem nuvem-erro" id="nuvem" title="Sem pasta conectada: as alterações ficam só neste navegador" aria-label="Situação do salvamento na nuvem"></button></span></div>
       <h1 id="titulo">Análise de Faturamento — Água e Esgoto</h1>
     </div>
     <div class="filtros" id="filtros">
@@ -507,7 +511,16 @@ body.sem-pasta #btnPasta, body.sem-pasta #btnLimparCache { display: none; }
         <button type="button" role="menuitem" data-base="completa-atual">Base completa por matrícula — mês atual<small>Dados da matrícula, consumo medido e faturado (água e esgoto) e faturamento água, esgoto e total</small></button>
         <button type="button" role="menuitem" data-base="completa-anterior">Base completa por matrícula — mês anterior<small>As mesmas colunas, para o mês anterior</small></button>
       </span></span>
-    <button type="button" class="btn-top" id="btnAcomp" hidden title="Baixar as tabelas da planilha de Acompanhamento Mensal (Excel, uma aba por tabela) da Superintendência escolhida">📥 Acompanhamento</button>
+    <span class="menu-pdf" id="menuAcompWrap"><button type="button" class="btn-top" id="btnAcomp" hidden aria-haspopup="true" aria-expanded="false" aria-controls="menuAcomp" title="Tabelas da planilha de Acompanhamento Mensal (Excel, uma aba por tabela) da Superintendência e do mês escolhidos">📥 Acompanhamento ▾</button>
+      <span class="menu-pdf-lista" id="menuAcomp" hidden>
+        <span class="acomp-opcoes">
+          <label>Orçado do faturamento por ciclo <select id="acompOrcCiclo"></select></label>
+          <label>Orçado das indiretas <select id="acompOrcInd"></select></label>
+          <small>Vale só para este arquivo (não muda os orçados filtrados no painel). A escolha fica guardada neste navegador.</small>
+        </span>
+        <button type="button" id="btnAcompGerar">📥 Gerar Acompanhamento<small>Excel da Superintendência e do mês escolhidos no cabeçalho</small></button>
+        <button type="button" id="btnAcompZerar">↺ Zerar contagem semanal<small>Apaga as "fotos" guardadas das indiretas: o próximo arquivo começa do zero</small></button>
+      </span></span>
   </div>
   <iframe id="quadroRelatorio" title="Relatório comparativo de água e esgoto" hidden></iframe>
 </main>
@@ -586,11 +599,17 @@ body.sem-pasta #btnPasta, body.sem-pasta #btnLimparCache { display: none; }
 <script src="faturamento/assets/tarifa.js"></script>
 <script>
 (() => {
-  // Outros sites do mesmo endereço (raniere3000-tech.github.io) dividem o armazenamento do navegador com este: tudo o
-  // que é guardado aqui (pasta conectada, arquivos já lidos, edições) leva este prefixo para não misturar as pastas.
-  const ESCOPO = "previa_de_fat_leste";
+  // Os dois repositórios (analise-faturamento-agua-esgoto e previa_de_fat_leste) têm os MESMOS arquivos: o painel é
+  // reconhecido pelo endereço do site. Painel com escopo (Leste) guarda tudo no navegador com prefixo próprio — sites do
+  // mesmo endereço (raniere3000-tech.github.io) não misturam pasta conectada, arquivos já lidos nem edições. O original
+  // fica sem prefixo (mantém o que já estava guardado). A SUP de cada painel fica em regras.json ("paineis").
+  const PAINEIS_COM_ESCOPO = ["previa_de_fat_leste"];
+  const PAINEL = (location.pathname.split("/").filter(Boolean)[0] || "").toLowerCase();
+  const ESCOPO = PAINEIS_COM_ESCOPO.includes(PAINEL) ? PAINEL : "";
+  const PFX = ESCOPO ? ESCOPO + ":" : "";
   window.ESCOPO_ARMAZENAMENTO = ESCOPO;            // o relatório (quadro) usa o mesmo prefixo
-  const VERSAO_SITE = "v123-20261028"; // muda a cada alteração: o selo do cabeçalho é derivado daqui
+  // Versão: v2.0, v2.1, v2.2 … v2.9, v2.10 … (mesma versão nos dois repositórios; ver CLAUDE.md)
+  const VERSAO_SITE = "v2.0-20261029"; // muda a cada alteração: o selo do cabeçalho é derivado daqui
   try { document.getElementById("versao").textContent = VERSAO_SITE.split("-")[0]; } catch (e) {}
   const EXTENSOES = [".csv", ".xlsx", ".xls"];
   const SAIDAS = {
@@ -758,7 +777,7 @@ body.sem-pasta #btnPasta, body.sem-pasta #btnLimparCache { display: none; }
   // A cada 2 s o site olha a data do ajustes_relatorio.json: se outra pessoa salvou (o OneDrive trouxe o arquivo novo),
   // o relatório aberto relê a pasta e aplica. Ao voltar para a aba também confere na hora.
   let ultimaModificacao = null, canalAjustes = null;
-  try { canalAjustes = new BroadcastChannel(ESCOPO + ":faturamento_ajustes"); canalAjustes.onmessage = () => avisaRelatorio(); } catch (e) { /* sem BroadcastChannel */ }
+  try { canalAjustes = new BroadcastChannel(PFX + "faturamento_ajustes"); canalAjustes.onmessage = () => avisaRelatorio(); } catch (e) { /* sem BroadcastChannel */ }
   function avisaRelatorio() {
     try { const w = quadro().hidden ? null : janela(); if (w && w.puxarTudoDaPasta) w.puxarTudoDaPasta(); } catch (e) {}
   }
@@ -788,7 +807,7 @@ body.sem-pasta #btnPasta, body.sem-pasta #btnLimparCache { display: none; }
 
   function pegaWorker() {
     if (!worker) {
-      worker = new Worker("analisador.worker.js?v=" + VERSAO_SITE + "&escopo=" + encodeURIComponent(ESCOPO));
+      worker = new Worker("analisador.worker.js?v=" + VERSAO_SITE + "&escopo=" + encodeURIComponent(ESCOPO) + "&painel=" + encodeURIComponent(PAINEL));
       worker.onmessage = (e) => trataMensagem(e.data);
       worker.onerror = (e) => {
         worker = null;
@@ -817,7 +836,7 @@ body.sem-pasta #btnPasta, body.sem-pasta #btnLimparCache { display: none; }
   // Fase 1: ler a pasta até a conferência do Top 20 (0–52%). Fase 2: gerar o relatório (52–100%).
   // Usa o tempo da última execução neste navegador (quanto cada faixa da barra levou), ajustado ao ritmo de agora;
   // na primeira vez, sem histórico, projeta pelo ritmo da própria barra. O valor conta os segundos entre as mensagens.
-  const ETA_LS = ESCOPO + ":faturamento_eta_v1";
+  const ETA_LS = PFX + "faturamento_eta_v1";
   let eta = { fase: null, t0: null, pontos: [], fim: null, timer: null };
   const etaHistorico = () => { try { return JSON.parse(localStorage.getItem(ETA_LS) || "{}"); } catch (e) { return {}; } };
   function iniciaEta(fase) {
@@ -1134,7 +1153,7 @@ body.sem-pasta #btnPasta, body.sem-pasta #btnLimparCache { display: none; }
 
   // Guarda a pasta conectada no navegador (IndexedDB) para reabri-la sozinho nas próximas visitas
   const idb = {
-    open() { return new Promise((res, rej) => { const r = indexedDB.open(ESCOPO + ":faturamento", 1); r.onupgradeneeded = () => r.result.createObjectStore("kv"); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); }); },
+    open() { return new Promise((res, rej) => { const r = indexedDB.open(PFX + "faturamento", 1); r.onupgradeneeded = () => r.result.createObjectStore("kv"); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); }); },
     async get(k) { try { const db = await this.open(); return await new Promise((res) => { const q = db.transaction("kv").objectStore("kv").get(k); q.onsuccess = () => res(q.result); q.onerror = () => res(null); }); } catch (e) { return null; } },
     async set(k, v) { try { const db = await this.open(); await new Promise((res) => { const t = db.transaction("kv", "readwrite"); t.objectStore("kv").put(v, k); t.oncomplete = res; t.onerror = res; }); } catch (e) {} },
   };
@@ -1167,7 +1186,7 @@ body.sem-pasta #btnPasta, body.sem-pasta #btnLimparCache { display: none; }
   // Janela de escolha da pasta. Normalmente abre na última pasta usada (id "faturamento"); depois de um cancelamento ou
   // de erro ("modo seguro") abre na Área de Trabalho: se a pasta antiga mudou de nome no OneDrive, o Chrome tentava abrir
   // nela e a janela travava sem aparecer ("File picker already active" nas tentativas seguintes).
-  const PICKER_LS = ESCOPO + ":faturamento_picker_seguro";
+  const PICKER_LS = PFX + "faturamento_picker_seguro";
   const pickerSeguro = (sim) => { try { if (sim) localStorage.setItem(PICKER_LS, "1"); else localStorage.removeItem(PICKER_LS); } catch (e) {} };
   let escolhendo = false, tentativasPasta = 0;
   // ajuda quando a janela de escolha não aparece (OneDrive travado, pasta renomeada): explica e oferece o modo alternativo
@@ -1204,7 +1223,7 @@ body.sem-pasta #btnPasta, body.sem-pasta #btnLimparCache { display: none; }
         if (escolhendo && !abriu && tentativa === tentativasPasta) { pickerSeguro(true); ajudaPasta(TEXTO_SEM_JANELA); }
       }, 4000);
       try {
-        const handle = await window.showDirectoryPicker(seguro ? { mode: "read", startIn: "desktop" } : { id: ESCOPO, mode: "read" });
+        const handle = await window.showDirectoryPicker(seguro ? { mode: "read", startIn: "desktop" } : { id: ESCOPO || "faturamento", mode: "read" });
         escolhendo = false;
         pickerSeguro(false);
         pastaHandle = handle;
@@ -1330,7 +1349,7 @@ body.sem-pasta #btnPasta, body.sem-pasta #btnLimparCache { display: none; }
   // ===== Ajustes da etapa 2 guardados (pasta do SharePoint; sem pasta, só neste navegador) =====
   // A etapa 2 só abre quando algum arquivo foi lido agora (novo ou alterado desde a última análise neste navegador) ou pelo
   // botão "Etapa 2". Sem arquivo novo, a análise segue sozinha com os ajustes salvos — os mesmos para todos.
-  const LS_AJUSTES = ESCOPO + ":faturamento_ajustes_etapa2";
+  const LS_AJUSTES = PFX + "faturamento_ajustes_etapa2";
   let forcarEtapa2 = false, refTop20 = "";
   async function ajustesSalvos(ref) {
     const comp = window.arquivoCompartilhado;
@@ -1692,7 +1711,7 @@ body.sem-pasta #btnPasta, body.sem-pasta #btnLimparCache { display: none; }
   }
 
   // ===== Filtros de cada pessoa: guardados só neste navegador (não mudam a tela de mais ninguém) =====
-  const FILTROS_LS = ESCOPO + ":faturamento_filtros_pessoais";
+  const FILTROS_LS = PFX + "faturamento_filtros_pessoais";
   function lerFiltrosSalvos() { try { return JSON.parse(localStorage.getItem(FILTROS_LS) || "{}") || {}; } catch (e) { return {}; } }
   function salvaFiltros(extra) {
     const atual = Object.assign(lerFiltrosSalvos(), { sup: filtrosEstado.sup, ref: filtrosEstado.ref, mes: filtrosEstado.mes,
@@ -1830,18 +1849,56 @@ body.sem-pasta #btnPasta, body.sem-pasta #btnLimparCache { display: none; }
   // de cada semana pelos dias úteis da semana: cada export guarda o realizado acumulado ("foto") no ajustes_relatorio.json,
   // seção "acompanhamento", e o próximo usa a diferença.
   let esperaAcomp = null;
-  $("btnAcomp").addEventListener("click", async () => {
+  // Orçados do arquivo: escolhidos aqui, só para ele (vazio = padrão: RF mais recente no faturamento por ciclo, SUP nas indiretas)
+  const ACOMP_ORC_LS = "faturamento_acomp_orcados";
+  // contagem semanal zerada em 29/10/2026: as fotos guardadas antes disso são apagadas no primeiro export
+  const ACOMP_ZERADO = "2026-10-29";
+  const zeradoAntes = (d) => !d || !d.acompanhamento_zerado || d.acompanhamento_zerado < ACOMP_ZERADO;
+  const lerOrcAcomp = () => { try { return JSON.parse(localStorage.getItem(ACOMP_ORC_LS) || "{}") || {}; } catch (e) { return {}; } };
+  function montaMenuAcomp() {
+    const fontes = (infoFiltros && infoFiltros.fontes) || [], salvo = lerOrcAcomp();
+    const ordemRf = (n) => { const m = /RF\s*0*(\d+)\s*T\s*(\d{2,4})/i.exec(n); return m ? (+m[2] < 100 ? +m[2] + 2000 : +m[2]) * 100 + +m[1] : -1; };
+    const rfs = fontes.filter((f) => !/SUP/i.test(f)), rfNovo = rfs.slice().sort((a, b) => ordemRf(b) - ordemRf(a))[0], sup = fontes.find((f) => /SUP/i.test(f));
+    const preenche = (sel, padrao, valor) => {
+      sel.innerHTML = `<option value="">Padrão${padrao ? ` (${escapa(padrao)})` : ""}</option>` + fontes.map((f) => `<option value="${escapa(f)}">${escapa(f)}</option>`).join("");
+      sel.value = fontes.includes(valor) ? valor : "";
+    };
+    preenche($("acompOrcCiclo"), rfNovo, salvo.ciclo);
+    preenche($("acompOrcInd"), sup, salvo.indiretas);
+  }
+  const menuAcomp = $("menuAcomp");
+  const fechaMenuAcomp = () => { menuAcomp.hidden = true; $("btnAcomp").setAttribute("aria-expanded", "false"); };
+  $("btnAcomp").addEventListener("click", (e) => {
+    e.stopPropagation();
+    if (menuAcomp.hidden) montaMenuAcomp();
+    menuAcomp.hidden = !menuAcomp.hidden; $("btnAcomp").setAttribute("aria-expanded", String(!menuAcomp.hidden));
+  });
+  document.addEventListener("click", (e) => { if (!menuAcomp.hidden && !e.target.closest("#menuAcompWrap")) fechaMenuAcomp(); });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !menuAcomp.hidden) fechaMenuAcomp(); });
+  ["acompOrcCiclo", "acompOrcInd"].forEach((id) => $(id).addEventListener("change", () => {
+    try { localStorage.setItem(ACOMP_ORC_LS, JSON.stringify({ ciclo: $("acompOrcCiclo").value, indiretas: $("acompOrcInd").value })); } catch (e) {}
+  }));
+  $("btnAcompZerar").addEventListener("click", async () => {
+    if (!pastaHandle) { window.avisoSite("Sem pasta conectada não há contagem guardada.", true); return; }
+    if (!confirm("Zerar a contagem semanal do Acompanhamento?\n\nApaga as \"fotos\" guardadas das indiretas (todas as superintendências e meses). O próximo arquivo começa do zero e passa a ser a primeira foto.")) return;
+    const res = await window.arquivoCompartilhado.atualizar((d) => { d.acompanhamento = {}; d.acompanhamento_zerado = new Date().toISOString().slice(0, 10); });
+    fechaMenuAcomp();
+    window.avisoSite(res.ok ? "Contagem semanal do Acompanhamento zerada." : `Não foi possível zerar (${res.motivo}).`, !res.ok);
+  });
+  $("btnAcompGerar").addEventListener("click", async () => {
     if (!worker || esperaAcomp) return;
+    fechaMenuAcomp();
     const b = $("btnAcomp"), texto = b.textContent;
+    const orcados = { ciclo: $("acompOrcCiclo").value, indiretas: $("acompOrcInd").value };
     b.disabled = true; b.textContent = "⏳ Gerando…";
     try {
       const sup = filtrosEstado.sup || "TODAS", ref = infoFiltros ? infoFiltros.mesAtual : "";
       let fotos = [];
       if (pastaHandle) {
         const d = await window.arquivoCompartilhado.ler();
-        fotos = (d && d.acompanhamento && d.acompanhamento[ref] && d.acompanhamento[ref][sup]) || [];
+        fotos = zeradoAntes(d) ? [] : (d && d.acompanhamento && d.acompanhamento[ref] && d.acompanhamento[ref][sup]) || [];
       }
-      const msg = await new Promise((ok) => { esperaAcomp = ok; worker.postMessage({ fase: "acompanhamento", sup, fotos }); });
+      const msg = await new Promise((ok) => { esperaAcomp = ok; worker.postMessage({ fase: "acompanhamento", sup, fotos, orcados, ref: ref === mesUltimo ? null : ref }); });   // o mês da tela
       if (msg.tipo === "acompanhamentoErro") { window.avisoSite("Não foi possível gerar o Acompanhamento: " + msg.motivo, true); return; }
       const url = URL.createObjectURL(new Blob([msg.conteudo], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }));
       const a = document.createElement("a"); a.href = url; a.download = msg.info.nome; document.body.appendChild(a); a.click(); a.remove();
@@ -1849,6 +1906,7 @@ body.sem-pasta #btnPasta, body.sem-pasta #btnLimparCache { display: none; }
       if (pastaHandle) {                          // guarda a foto desta data (substitui a do mesmo dia)
         const foto = msg.info.foto, r = msg.info.ref, sp = msg.info.sup;
         const res = await window.arquivoCompartilhado.atualizar((d) => {
+          if (zeradoAntes(d)) { d.acompanhamento = {}; d.acompanhamento_zerado = ACOMP_ZERADO; }   // começa do zero
           const m = (d.acompanhamento = d.acompanhamento || {}), mr = (m[r] = m[r] || {});
           mr[sp] = (mr[sp] || []).filter((f) => f.ate !== foto.ate).concat([foto]).sort((x, y) => (x.ate < y.ate ? -1 : 1));
         });
