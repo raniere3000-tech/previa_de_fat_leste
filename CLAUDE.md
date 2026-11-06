@@ -14,6 +14,7 @@
 - O painel original (`raniere3000-tech/analise-faturamento-agua-esgoto`) é a fonte: **tudo o que entra nele é replicado
   aqui**; nada daqui volta para lá. O que só existe aqui (Grandes Clientes, modelos de orçado sem a coluna Sup,
   cronograma sem Qts. Dias e filtrado pela `sup_do_painel`, prefixo do armazenamento) continua só aqui.
+  O ícone da aba (gota) leva **PL** (Prévia Leste) aqui, no `index.html` e no `faturamento/relatorio.py`; no original é PI.
 - Para replicar: `git cherry-pick -n` dos commits do original, na ordem, a partir do hash em
   `.github/replicacao-original.txt`. Nos conflitos, fica a numeração de versão daqui e o que os dois lados acrescentaram.
   Chave nova do navegador que vier do original ganha o prefixo do site (`LS_PREFIXO +` no `relatorio.js`,
