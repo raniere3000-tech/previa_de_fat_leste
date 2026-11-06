@@ -211,3 +211,70 @@ def minimo_matricula_vetorizado(df):
     unicas = cats.unique()
     minimo_cat = cats.map({c: CONSUMO_MINIMO_POR_CATEGORIA.get(normaliza_texto(c)) for c in unicas}).astype(float)
     return minimo_misto.where(mista, minimo_cat * qtds.sum(axis=1))
+
+
+def dados_variacao_categoria_cidade(ctx):
+    """Faturamento direto (água e esgoto) do mês anterior e do atual por grupo × SUP × categoria × cidade × serviço.
+    Vai embutido no relatório; a tabela da aba Análise soma no navegador pela visão (categoria ou cidade), pelo serviço e
+    pelos filtros de Superintendência e Grupo (relatorio.js, varCatDesenhar)."""
+    from .leitura import chave_grupo
+    partes = []
+    for mes, df in (("an", ctx.df_anterior), ("at", ctx.df_atual)):
+        if df is None or not len(df):
+            continue
+        serv = df["__serv"] if "__serv" in df.columns else df["Rubrica"].astype(str).str.upper().map(
+            lambda r: "E" if "ESGOTO" in r else "A" if "AGUA" in r else "")
+        cid = df["__cidade"] if "__cidade" in df.columns else df.get("Nome da Localidade", pd.Series("", index=df.index))
+        consumo = pd.to_numeric(df["Consumo Faturado"], errors="coerce").fillna(0)
+        eco = pd.to_numeric(df["Economias_Totais"], errors="coerce").fillna(0) if "Economias_Totais" in df.columns else consumo * 0
+        # economias acima do mínimo: mesma regra da tabela Acima × Abaixo do mínimo (só linhas de água)
+        agua = serv == "A"
+        acima = pd.Series(0.0, index=df.index)
+        if agua.any() and "Categoria" in df.columns:
+            cl = classifica_minimo(df[agua])
+            qtd = sum(pd.to_numeric(df.loc[agua, c], errors="coerce").fillna(0) if c in df.columns else 0.0 for c in MINIMO_POR_TIPO_ECONOMIA)
+            acima.loc[agua] = qtd.where(cl["classe"] == "Acima", 0.0)
+        t = pd.DataFrame({"m": mes, "g": df["Grupo"].map({g: chave_grupo(g) for g in df["Grupo"].dropna().unique()}),
+                          "sup": df["__sup"] if "__sup" in df.columns else "", "cat": df.get("Categoria", pd.Series("", index=df.index)),
+                          "cid": cid, "s": serv, "v": pd.to_numeric(df["Valor (R$)"], errors="coerce").fillna(0),
+                          # economias e volume faturados: só onde Consumo Faturado > 0 (regra do Comparativo das Diretas)
+                          "eco": eco.where(consumo > 0, 0.0), "vol": consumo.where(consumo > 0, 0.0), "aci": acima})
+        t = t[t["s"].isin(["A", "E"])]
+        for c in ("g", "sup", "cat", "cid"):
+            t[c] = t[c].astype(object).where(t[c].notna(), "").astype(str).str.strip()
+        t["cat"] = t["cat"].replace("", "SEM CATEGORIA")
+        t["cid"] = t["cid"].replace("", "SEM CIDADE")
+        partes.append(t.groupby(["m", "g", "sup", "cat", "cid", "s"], sort=False)[["v", "eco", "vol", "aci"]].sum().reset_index())
+    if not partes:
+        return None
+    a = pd.concat(partes, ignore_index=True)
+    dims = {c: sorted(a[c].unique()) for c in ("g", "sup", "cat", "cid")}
+    idx = {c: {v: i for i, v in enumerate(dims[c])} for c in dims}
+    linhas = [[0 if m == "an" else 1, idx["g"][g], idx["sup"][sp], idx["cat"][ct], idx["cid"][cd], 0 if s == "A" else 1, round(float(v), 2),
+               round(float(e), 2), round(float(vo), 2), round(float(ac), 2)]
+              for m, g, sp, ct, cd, s, v, e, vo, ac in a.itertuples(index=False)]
+    return {"atual": ctx.mes_atual_curto, "anterior": ctx.mes_anterior_curto, "dims": dims, "linhas": linhas}
+
+
+def gera_variacao_categoria_cidade_html(ctx):
+    import html
+    import json
+    d = dados_variacao_categoria_cidade(ctx)
+    if not d:
+        return ""
+    return ('<div class="card var-cat-card" id="varCatCard">'
+            f'<h2 class="prev-titulo">Variação do faturamento direto por categoria e cidade — {html.escape(ctx.mes_atual_curto)} × '
+            f'{html.escape(ctx.mes_anterior_curto)}<span class="prev-acoes"><button type="button" class="btn-just" id="varCatBaixar" '
+            'title="Baixar a tabela (Excel)" aria-label="Baixar a tabela (Excel)">&#11015;</button></span></h2>'
+            '<p class="nota-secao">Faturamento direto (Valor das rubricas de água e esgoto da fatura) do mês anterior e do atual, '
+            'pela categoria ou pela cidade da ligação. Economias e volume faturados contam só onde o Consumo Faturado é maior que 0 '
+            '(como no Comparativo das Diretas); tarifa média = faturamento ÷ volume. Em <b>Total</b>, como no Resumo: economias = '
+            'a maior entre água e esgoto, volume = o da água e tarifa = faturamento total ÷ volume da água. Economias acima do mínimo: '
+            'mesma regra da tabela Acima × Abaixo do mínimo (economias de água com consumo acima do mínimo da matrícula). '
+            'Segue os filtros de Superintendência e Grupo do cabeçalho. Clique no título de uma coluna para ordenar.</p>'
+            '<div class="orc-grupos-filtros"><label>Visão <select id="varCatVisao"><option value="cat">Categoria</option>'
+            '<option value="cid">Cidade</option></select></label>'
+            '<label>Faturamento <select id="varCatServ"><option value="T">Total (água + esgoto)</option><option value="A">Água</option>'
+            '<option value="E">Esgoto</option></select></label></div>'
+            '<div class="tabela-wrap"><table class="tabela-dre var-cat-tabela" id="varCatTabela"><thead></thead><tbody></tbody></table></div>'
+            '<script type="application/json" id="var-cat-dados">' + json.dumps(d, ensure_ascii=False).replace("</", "<\\/") + '</script></div>')

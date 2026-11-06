@@ -8,3 +8,16 @@
 - **Publicação autorizada:** o dono do repositório autorizou mesclar sempre. Depois de validar
   (testes passando), abra o PR da branch de trabalho para a `main` e mescle — a `main` é o que o
   GitHub Pages publica. Antes de mesclar, confira que o PR já contém o último commit enviado.
+
+## Replicação do painel original (mão única)
+
+- O painel original (`raniere3000-tech/analise-faturamento-agua-esgoto`) é a fonte: **tudo o que entra nele é replicado
+  aqui**; nada daqui volta para lá. O que só existe aqui (Grandes Clientes, modelos de orçado sem a coluna Sup,
+  cronograma sem Qts. Dias e filtrado pela `sup_do_painel`, prefixo do armazenamento) continua só aqui.
+- Para replicar: `git cherry-pick -n` dos commits do original, na ordem, a partir do hash em
+  `.github/replicacao-original.txt`. Nos conflitos, fica a numeração de versão daqui e o que os dois lados acrescentaram.
+  Chave nova do navegador que vier do original ganha o prefixo do site (`LS_PREFIXO +` no `relatorio.js`,
+  `ESCOPO + ":..."` no `index.html`) — o teste `test_armazenamento_do_navegador_separado_por_site` confere.
+- Depois de publicar, troque a primeira linha de `.github/replicacao-original.txt` pelo hash completo do último commit
+  replicado. O aviso (`.github/workflows/avisar-replicacao.yml`, a cada 2 horas) mantém a issue `replicar-original`
+  com o que falta e a fecha quando tudo estiver replicado.
