@@ -6,7 +6,7 @@ const LS_PREFIXO = (() => {
     catch (e) { return ''; }
 })();
 
-const VIEWS = ['resumo', 'tabelas', 'analise', 'indiretas', 'forecast', 'dre', 'garantia', 'plano', 'onepage', 'dados'];
+const VIEWS = ['resumo', 'tabelas', 'analise', 'indiretas', 'forecast', 'dre', 'fechamento', 'garantia', 'plano', 'onepage', 'dados'];
 function mostrarView(view) {
     VIEWS.forEach(v => {
         document.getElementById('view-' + v).classList.toggle('ativo', v === view);
@@ -45,6 +45,8 @@ function definirFiltros(parcial) {
     desenharGraficosIndiretas();
     if (typeof garRedesenhar === 'function') garRedesenhar();
     if (typeof planoDesenhar === 'function') planoDesenhar();
+    if (typeof orcGruposDesenhar === 'function') orcGruposDesenhar();
+    if (typeof varCatDesenhar === 'function') varCatDesenhar();
     if (typeof opDesenhar === 'function') opDesenhar();
 }
 
@@ -226,6 +228,9 @@ function filtrarPorGrupo() {
     cortRecalcular(); cort3Recalcular();                    // cortadas com consumo (mês e 3 meses)
     if (typeof garRedesenhar === 'function') garRedesenhar();   // aba Garantia (Top 1000, análise e resumo)
     if (typeof planoDesenhar === 'function') planoDesenhar();   // aba Plano de ação
+    if (typeof orcGruposDesenhar === 'function') orcGruposDesenhar();   // aba Diretas: orçados por grupo
+    if (typeof varCatDesenhar === 'function') varCatDesenhar();         // aba Análise: variação por categoria / cidade
+    if (typeof fechDesenhar === 'function') fechDesenhar();             // aba Fechamento (segue a SUP do cabeçalho)
     if (typeof opDesenhar === 'function') opDesenhar();         // aba One page
 }
 
@@ -1579,6 +1584,8 @@ function gerarExecutivo(libs, modo) {
         });
         c.querySelectorAll('script').forEach(x => x.remove());          // só o conteúdo: nada roda no documento do PDF
         c.querySelectorAll('.dias-uteis').forEach(x => x.remove());     // no PDF vai só a tabela do forecast (sem o painel de dias úteis)
+        // no PDF a coluna Forecast sai sempre (DRE - Forecast e Indiretas): fica Realizado + Forecast, como no "Ocultar forecast"
+        c.querySelectorAll('table.tabela-previsao').forEach(t => t.classList.add('prev-sem-forecast'));
         c.querySelectorAll('[contenteditable]').forEach(x => x.removeAttribute('contenteditable'));
         c.querySelectorAll('.jg-col').forEach((col) => { const t = col.querySelector('.jg-txt'); if (t && !t.textContent.trim()) col.remove(); });
         c.querySelectorAll('.jg').forEach((b) => { const n = b.querySelectorAll('.jg-col').length; if (!n) b.remove(); else if (n === 1) b.querySelector('.jg-cols').classList.add('um'); });
@@ -1612,7 +1619,8 @@ function gerarExecutivo(libs, modo) {
         ['Faturamento Mês a Mês', [card('#tabela-agua'), card('#tabela-esgoto')]],
         ['Indiretas', qa(`#view-indiretas .sup-bloco[data-sup="${sup}"][data-mes="${mes}"] .prev-card`)],
         ['Plano de Ação', [q('#plano-card.tem-dados')]],
-        ['Análise de Ciclo', [q('#card-justificativa')]],         // título só no PDF, em cima das justificativas
+        // título só no PDF, em cima das justificativas; sem nenhuma justificativa escrita a seção não entra (não sobra página em branco)
+        ['Análise de Ciclo', qa('#card-justificativa .jg-txt, #lista-justificativas > p').some((t) => t.textContent.trim() || t.querySelector('img')) ? [q('#card-justificativa')] : []],
     ];
     // justificativas: cada grupo vira um bloco próprio no PDF — a quebra de página cai entre grupos, sem cortar o texto
     const separaGrupos = (c) => {
@@ -1985,7 +1993,8 @@ let sitManuais = {};
 try { sitManuais = JSON.parse(localStorage.getItem(LS_PREFIXO + SIT_LS) || '{}') || {}; } catch (e) { /* sem armazenamento: vale só nesta abertura */ }
 function sitSalvar() {
     try { localStorage.setItem(LS_PREFIXO + SIT_LS, JSON.stringify(sitManuais)); } catch (e) { /* ignora */ }
-    if (typeof garDesenharResumo === 'function') setTimeout(garDesenharResumo, 0);     // "Somente grupos liberados" acompanha
+    // "Somente grupos liberados" e o "em análise (retida)" (só em grupo não liberado) acompanham a situação escolhida
+    if (typeof garRedesenhar === 'function') setTimeout(garRedesenhar, 0);
     if (typeof syncSituacao !== 'undefined') syncSituacao.agendar();
 }
 function sitAplicar(el) {
@@ -2085,7 +2094,7 @@ function marcaNuvem(nome, r) {
 // clique na nuvem: grava tudo o que está na tela e relê a pasta; devolve true se tudo foi salvo
 window.sincronizarTudo = async function () {
     if (!compartilhado()) return false;
-    const r = [await syncForecast.empurrar(), await syncSituacao.empurrar(), await syncGarantia.empurrar(), await syncPlano.empurrar(), await syncOnePage.empurrar(), await syncGC.empurrar(), await salvarJustificativas()];
+    const r = [await syncForecast.empurrar(), await syncSituacao.empurrar(), await syncGarantia.empurrar(), await syncGarLiberadas.empurrar(), await syncFechamento.empurrar(), await syncPlano.empurrar(), await syncOnePage.empurrar(), await syncGC.empurrar(), await salvarJustificativas()];
     puxarAjustesCompartilhados(); lerJustificativasDaPasta();
     return r.every(Boolean);
 };
@@ -2097,14 +2106,23 @@ function avisoNuvem(texto, erro) {
 }
 const igualJson = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 const copiaJson = (o) => JSON.parse(JSON.stringify(o || {}));
+// Campo em edição (texto, número, lista, editor): nada que venha da pasta substitui a tela enquanto a pessoa digita — antes,
+// o retorno da gravação ou a atualização a cada 2 s redesenhava a tabela e tirava o cursor da caixa no meio da frase.
+function editandoAlgo() {
+    const a = document.activeElement;
+    return !!(a && a !== document.body && ((a.matches && a.matches('input:not([type=checkbox]):not([type=radio]):not([type=button]), textarea, select')) || a.isContentEditable));
+}
 function criaSync(secao, nome, obter, definir, redesenhar, ocupado) {
-    let base = null, timer = null;
+    let base = null, timer = null, adiado = false;
+    const espera = () => editandoAlgo() || (ocupado && ocupado());
     async function puxar() {
         const comp = compartilhado();
-        if (!comp || (ocupado && ocupado()) || timer || pendentesNuvem.has(nome)) return;   // não atropela o que ainda vai ser salvo
+        if (!comp || timer || pendentesNuvem.has(nome)) return;   // não atropela o que ainda vai ser salvo
+        if (espera()) { adiado = true; return; }                 // relê quando a pessoa sair do campo
         const d = await comp.ler();
         if (!d) return;
         if (!d[secao]) { if (base === null) base = {}; return; }   // nunca salvo na pasta: fica o que há neste navegador
+        if (espera() || timer) { adiado = true; return; }        // começou a digitar durante a leitura
         const remoto = d[secao].mapa || {};
         if (!igualJson(remoto, obter())) {
             definir(copiaJson(remoto)); redesenhar();
@@ -2126,15 +2144,27 @@ function criaSync(secao, nome, obter, definir, redesenhar, ocupado) {
         });
         if (r.ok) {
             base = copiaJson(r.dados[secao].mapa);
-            if (!igualJson(base, obter())) { definir(copiaJson(base)); redesenhar(); }
+            // o que foi digitado enquanto gravava fica (e vai na próxima gravação); de fora, entra só o que outra pessoa mudou
+            const agora = obter(), junto = copiaJson(base);
+            let digitouDepois = false;
+            new Set([...Object.keys(atual), ...Object.keys(agora)]).forEach(k => {
+                if (igualJson(atual[k], agora[k])) return;
+                digitouDepois = true;
+                if (k in agora) junto[k] = copiaJson(agora[k]); else delete junto[k];
+            });
+            if (!igualJson(junto, agora)) {
+                if (espera()) adiado = true;                     // redesenha quando sair do campo
+                else { definir(junto); redesenhar(); }
+            }
+            if (digitouDepois) agendar();
         }
         marcaNuvem(nome, r);
         return r.ok;
     }
-    return {
-        puxar, empurrar,
-        agendar() { clearTimeout(timer); timer = setTimeout(() => { timer = null; empurrar(); }, 700); },
-    };
+    function agendar() { clearTimeout(timer); timer = setTimeout(() => { timer = null; empurrar(); }, 700); }
+    // saiu do campo: aplica o que ficou esperando (outra pessoa salvou enquanto digitava)
+    document.addEventListener('focusout', () => setTimeout(() => { if (adiado && !espera()) { adiado = false; puxar(); } }, 400));
+    return { puxar, empurrar, agendar };
 }
 var syncForecast = criaSync('forecast', 'Forecast', () => prevEdicoes,
     (m) => { prevEdicoes = m; try { localStorage.setItem(LS_PREFIXO + PREV_CHAVE_LS, JSON.stringify({ edicoes: prevEdicoes, oculta: prevOculta, ocultaInd: prevOcultaInd })); } catch (e) {} },
@@ -2150,6 +2180,8 @@ var syncSituacao = criaSync('situacao', 'Situação do grupo',
 function puxarAjustesCompartilhados() {
     syncForecast.puxar(); syncSituacao.puxar();
     if (typeof syncGarantia !== 'undefined') syncGarantia.puxar();
+    if (typeof syncGarLiberadas !== 'undefined') syncGarLiberadas.puxar();
+    if (typeof syncFechamento !== 'undefined') syncFechamento.puxar();
     if (typeof syncPlano !== 'undefined') syncPlano.puxar();
     if (typeof syncOnePage !== 'undefined') syncOnePage.puxar();
     if (typeof syncGC !== 'undefined') syncGC.puxar();
@@ -2213,7 +2245,32 @@ try { garItens = JSON.parse(localStorage.getItem(LS_PREFIXO + GAR_LS) || '{}') |
 const garEsc = (v) => String(v == null ? '' : v).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const garR = (v) => (v == null || isNaN(v) ? '–' : 'R$ ' + fmtBR(v, 2));
 const garN = (v, d) => (v == null || isNaN(v) ? '–' : fmtBR(v, d || 0));
-const garEmAnalise = (d) => !!d && (d.sit || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().trim() === 'EM ANALISE';
+// Em análise = Situação Conta EM ANALISE ou (teste) Situação Lançamento com "RETIDA" no nome num grupo ainda não liberado:
+// muitas contas aparecem como liberadas na Situação Conta e ainda estão retidas no lançamento.
+const garNormSit = (t) => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().trim();
+// RETIDA só vale nos grupos que ainda NÃO estão liberados (Situação do grupo da aba Diretas: automática, pela mesma regra da
+// etapa 2 — nenhuma conta EM ANALISE no grupo = Liberado —, ou a escolhida à mão). Grupo liberado: vale só a Situação Conta.
+let garLibCache = null;
+const garGruposLib = () => { if (!garLibCache) { garLibCache = gruposLiberados(); setTimeout(() => { garLibCache = null; }, 0); } return garLibCache; };
+const garRetida = (d) => !!d && /RETID/.test(garNormSit(d.lanc)) && !garGruposLib().has(normGrupo(d.grupo));
+// Liberada à mão: o botão ao lado da situação (Top 1000 e Aumentos e quedas) marca a matrícula como já liberada no mês, por cima
+// da Situação Conta / lançamento. Fica na seção "garantiaLiberadas" do ajustes_relatorio.json (vale para todos).
+const GAR_LIB_LS = 'faturamento_gar_liberadas';
+let garLibManual = {};
+try { garLibManual = JSON.parse(localStorage.getItem(LS_PREFIXO + GAR_LIB_LS) || '{}') || {}; } catch (e) { garLibManual = {}; }
+const garLiberadaManual = (d) => !!d && !!garLibManual[`${GAR.ref}|${d.lig}`];
+const garEmAnaliseAuto = (d) => !!d && (garNormSit(d.sit) === 'EM ANALISE' || garRetida(d));
+const garEmAnalise = (d) => garEmAnaliseAuto(d) && !garLiberadaManual(d);
+const garRotSit = (d) => (garLiberadaManual(d) ? 'Liberada (manual)' : garNormSit(d.sit) === 'EM ANALISE' ? 'Em análise' : garRetida(d) ? 'Em análise (retida)' : (d.sit || ''));
+// célula da situação: selo + botão (✓ Liberar quando em análise; ↺ para desfazer a marcação manual)
+function garSitCelula(d, vazio) {
+    if (!d.sit && !garLiberadaManual(d)) return vazio;
+    const an = garEmAnalise(d), man = garLiberadaManual(d), lig = garEsc(String(d.lig));
+    const selo = `<span class="gar-sit ${an ? 'gar-sit-analise' : 'gar-sit-lib'}"${man ? ` title="Marcada como liberada em ${garEsc(new Date(garLibManual[`${GAR.ref}|${d.lig}`]).toLocaleDateString('pt-BR'))}"` : ''}>${garEsc(an || man ? garRotSit(d) : d.sit)}</span>`;
+    const btn = man ? `<button type="button" class="gar-lib-btn gar-lib-desfaz" data-lib-lig="${lig}" title="Desfazer: voltar à situação da fatura">↺</button>`
+        : an ? `<button type="button" class="gar-lib-btn" data-lib-lig="${lig}" title="Marcar esta matrícula como já liberada">✓ Liberar</button>` : '';
+    return `<span class="gar-sit-cel">${selo}${btn}</span>`;
+}
 const garVar = (atual, media) => (atual == null || !media ? null : (atual - media) / media);
 
 function garCarregar() {
@@ -2249,12 +2306,13 @@ const GAR_COLS_TOP = [
     ['rank', '#', 'n'], ['lig', 'Matrícula', 't'], ['nome', 'Cliente', 't'], ['cat', 'Categoria', 't'], ['loc', 'Localidade', 't'],
     ['grupo', 'Grupo', 't'], ['sup', 'SUP', 't'], ['eco', 'Econ.', 'n'], ['mMed', 'Média cons. medido (m³)', 'n'],
     ['mCons', 'Média cons. faturado (m³)', 'n'], ['cons', 'Cons. faturado atual (m³)', 'n'], ['dCons', 'Δ% cons.', 'n'],
-    ['mVal', 'Média faturado (R$)', 'n'], ['val', 'Faturado atual (R$)', 'n'], ['dVal', 'Δ% R$', 'n'], ['sit', 'Situação conta', 't'],
+    ['mVal', 'Média faturado (R$)', 'n'], ['val', 'Faturado atual (R$)', 'n'], ['dValR', 'Δ R$', 'n'], ['dVal', 'Δ% R$', 'n'], ['sit', 'Situação conta', 't'],
 ];
 function garValorCol(d, c) {
     if (c === 'eco') return (d.res || 0) + (d.com || 0) + (d.ind || 0) + (d.pub || 0);
     if (c === 'dCons') return garVar(d.cons, d.mCons);
     if (c === 'dVal') return garVar(d.val, d.mVal);
+    if (c === 'dValR') return d.val != null && d.mVal != null ? d.val - d.mVal : null;     // faturado atual − média faturada
     return d[c];
 }
 function garLinhasTop() {
@@ -2316,6 +2374,8 @@ function garDesenharTop() {
     tab.tHead.innerHTML = '<tr>' + GAR_COLS_TOP.map(([c, t, tipo]) => `<th class="gar-ord ${tipo === 'n' ? 'num' : ''}" data-ord="${c}" tabindex="0" title="Ordenar">${t}${c === campo ? (desc ? ' ▼' : ' ▲') : ''}</th>`).join('') + '<th></th></tr>';
     const ls = garLinhasTop();
     const naAnalise = new Set(Object.keys(garItens).filter((k) => k.startsWith(GAR.ref + '|')).map((k) => k.slice(GAR.ref.length + 1)));
+    const difCel = (v, p) => (v == null ? '<td class="num">–</td>'          // Δ R$ com a mesma cor do Δ% (forte acima de 30%)
+        : `<td class="num ${p != null && Math.abs(p) > 0.3 ? 'gar-forte ' + (v < 0 ? 'gar-queda' : 'gar-aumento') : ''}">${garR(v)}</td>`);
     const pctCel = (p) => {
         if (p == null) return '<td class="num">–</td>';
         const forte = Math.abs(p) > 0.3, cls = p < 0 ? 'gar-queda' : 'gar-aumento';
@@ -2324,12 +2384,12 @@ function garDesenharTop() {
     tab.tBodies[0].innerHTML = ls.map((d) => {
         const dc = garVar(d.cons, d.mCons), dv = garVar(d.val, d.mVal);
         const forte = (dc != null && Math.abs(dc) > 0.3) || (dv != null && Math.abs(dv) > 0.3);
-        const sit = d.sit ? `<span class="gar-sit ${garEmAnalise(d) ? 'gar-sit-analise' : 'gar-sit-lib'}">${garEsc(garEmAnalise(d) ? 'Em análise' : d.sit)}</span>` : '<span class="gar-sit">sem fatura no mês</span>';
+        const sit = garSitCelula(d, '<span class="gar-sit">sem fatura no mês</span>');
         const lig = String(d.lig);
         return `<tr class="${forte ? 'gar-linha-forte' : ''}"><td class="num">${d.rank}</td><td class="${forte ? 'gar-forte' : ''}">${garEsc(lig)}</td>`
             + `<td class="gar-cli" title="${garEsc(d.nome)}">${garEsc(d.nome)}</td><td>${garEsc(d.cat)}</td><td>${garEsc(d.loc)}</td><td>${garEsc(d.grupo)}</td><td>${garEsc(d.sup)}</td>`
             + `<td class="num">${garN(garValorCol(d, 'eco'))}</td><td class="num">${garN(d.mMed, 1)}</td><td class="num">${garN(d.mCons, 1)}</td><td class="num">${garN(d.cons, 1)}</td>${pctCel(dc)}`
-            + `<td class="num">${garR(d.mVal)}</td><td class="num">${garR(d.val)}</td>${pctCel(dv)}<td>${sit}</td>`
+            + `<td class="num">${garR(d.mVal)}</td><td class="num">${garR(d.val)}</td>${difCel(garValorCol(d, 'dValR'), dv)}${pctCel(dv)}<td>${sit}</td>`
             + `<td><button type="button" class="btn-just gar-add" data-lig="${garEsc(lig)}" ${naAnalise.has(lig) ? 'disabled title="Já está na Análise de Garantia"' : 'title="Levar para a Análise de Garantia"'}>${naAnalise.has(lig) ? '✓' : '+ Análise'}</button></td></tr>`;
     }).join('') || `<tr><td colspan="${GAR_COLS_TOP.length + 1}" class="gar-vazio">${GAR.busca.length && !GAR.busca.some((t) => GAR.lista.some((d) => String(d.lig).includes(t)))
         ? 'Matrícula fora do Top ' + GAR.top + ': para analisá-la, use a sub-aba Análise de Garantia.' : 'Nenhuma matrícula com os filtros escolhidos.'}</td></tr>`;
@@ -2369,7 +2429,7 @@ function garVarValor(d, r, c) {
     if (c === 'dc') return d.cons != null && d.cAnt != null ? d.cons - d.cAnt : null;
     if (c === 'dv') return garDifVal(d);
     if (c === 'pv') return d.vAnt ? garDifVal(d) / d.vAnt : null;
-    if (c === 'sit') return garEmAnalise(d) ? 'Em análise' : d.sit;
+    if (c === 'sit') return garEmAnalise(d) ? garRotSit(d) : d.sit;
     if (c === 'grupo') return parseInt(normGrupo(d.grupo), 10) || 0;
     return d[c];
 }
@@ -2397,7 +2457,7 @@ function garDesenharVar() {
             + `title="Clique para ordenar">${t}${c === campo ? (desc ? ' ▼' : ' ▲') : ''}</th>`).join('') + '<th></th></tr>';
         tab.tBodies[0].innerHTML = vis.map(([d, r]) => {
             const dc = (d.cons != null && d.cAnt != null) ? d.cons - d.cAnt : null, dv = garDifVal(d), pv = d.vAnt ? dv / d.vAnt : null;
-            const sit = d.sit ? `<span class="gar-sit ${garEmAnalise(d) ? 'gar-sit-analise' : 'gar-sit-lib'}">${garEsc(garEmAnalise(d) ? 'Em análise' : d.sit)}</span>` : '';
+            const sit = garSitCelula(d, '');
             const lig = String(d.lig), cls = dv < 0 ? 'gar-queda' : 'gar-aumento';
             return `<tr><td class="num">${r}</td><td>${garEsc(lig)}</td><td class="gar-cli" title="${garEsc(d.nome)}">${garEsc(d.nome)}</td><td>${garEsc(d.cat)}</td>`
                 + `<td>${garEsc(d.loc)}</td><td>${garEsc(d.grupo)}</td><td>${garEsc(d.sup)}</td><td class="num">${garN(garValorCol(d, 'eco'))}</td>`
@@ -2503,7 +2563,7 @@ function garValorAnalise(it, c) {
     switch (c) {
         case 'lig': return it.lig;
         case 'tot': return d ? (d.res || 0) + (d.com || 0) + (d.ind || 0) + (d.pub || 0) : null;
-        case 'sit': return d ? (garEmAnalise(d) ? 'Em análise' : (d.sit || '')) : '';
+        case 'sit': return d ? (garEmAnalise(d) ? garRotSit(d) : (d.sit || '')) : '';
         case 'media': return it.media; case 'calc': return calc; case 'anterior': return it.anterior;
         case 'atual': return atual; case 'dif': return dif;
         case 'motivo': return it.motivo === 'QUEDA' ? 'Queda de consumo' : it.motivo === 'AUMENTO' ? 'Aumento de consumo' : '';
@@ -2544,7 +2604,7 @@ function garDesenharAnalise() {
         const { d, calc, atual, dif } = garCalcItem(it);
         if (it.anterior == null && atual != null) { garItens[garChave(it.lig)].anterior = atual; garItens[garChave(it.lig)].foto = new Date().toISOString(); it.anterior = atual; mudouFoto = true; }
         const tot = d ? (d.res || 0) + (d.com || 0) + (d.ind || 0) + (d.pub || 0) : null;
-        const sit = !d ? '<span class="gar-sit">não encontrada</span>' : d.sit ? `<span class="gar-sit ${garEmAnalise(d) ? 'gar-sit-analise' : 'gar-sit-lib'}">${garEsc(garEmAnalise(d) ? 'Em análise' : d.sit)}</span>` : '<span class="gar-sit">sem fatura no mês</span>';
+        const sit = !d ? '<span class="gar-sit">não encontrada</span>' : d.sit ? `<span class="gar-sit ${garEmAnalise(d) ? 'gar-sit-analise' : 'gar-sit-lib'}">${garEsc(garEmAnalise(d) ? garRotSit(d) : d.sit)}</span>` : '<span class="gar-sit">sem fatura no mês</span>';
         const opt = (v, t) => `<option value="${v}" ${it.motivo === v ? 'selected' : ''}>${t}</option>`;
         const optOS = (v, t) => `<option value="${garEsc(v)}" ${(it.obs || '') === v ? 'selected' : ''}>${garEsc(t)}</option>`;
         const hist = it.historico ? ` <span class="gar-hist" title="Trazida da planilha (análise feita antes do painel): Fat. anterior informado na planilha">Histórico</span>` : '';
@@ -2605,6 +2665,7 @@ document.addEventListener('click', (e) => {
     if (aba) {
         document.querySelectorAll('[data-gar-aba]').forEach((b) => { const ok = b === aba; b.classList.toggle('ativo', ok); b.setAttribute('aria-pressed', ok ? 'true' : 'false'); });
         document.querySelectorAll('.gar-painel').forEach((p) => { p.hidden = p.dataset.gar !== aba.dataset.garAba; });
+        document.querySelectorAll('#garAvisoOS .gar-os-obs').forEach((t) => { if (t.offsetParent) garOSObsAltura(t); });   // Obs. com a altura do texto
         return;
     }
     const ord = e.target.closest && e.target.closest('#garTabelaTop th.gar-ord');
@@ -2714,10 +2775,11 @@ function garImportarExcel(texto) {
 }
 function garBaixarTop() {
     const cols = ['Ranking', 'Matrícula', 'Cliente', 'Categoria', 'Localidade', 'Grupo', 'SUP', 'Economias', 'Média cons. medido (m³)',
-        'Média cons. faturado (m³)', 'Cons. faturado atual (m³)', 'Δ% cons.', 'Média faturado (R$)', 'Faturado atual (R$)', 'Δ% R$', 'Situação conta'];
+        'Média cons. faturado (m³)', 'Cons. faturado atual (m³)', 'Δ% cons.', 'Média faturado (R$)', 'Faturado atual (R$)', 'Δ R$', 'Δ% R$', 'Situação conta'];
     const pct = (p) => (p == null ? null : Math.round(p * 1000) / 10);
     const linhas = garLinhasTop().map((d) => [d.rank, d.lig, d.nome, d.cat, d.loc, d.grupo, d.sup, garValorCol(d, 'eco'), d.mMed, d.mCons, d.cons,
-        pct(garVar(d.cons, d.mCons)), d.mVal, d.val, pct(garVar(d.val, d.mVal)), d.sit || '']);
+        pct(garVar(d.cons, d.mCons)), d.mVal, d.val, garValorCol(d, 'dValR') == null ? null : Math.round(garValorCol(d, 'dValR') * 100) / 100,
+        pct(garVar(d.val, d.mVal)), garEmAnalise(d) ? garRotSit(d) : (d.sit || '')]);
     baixarPlanilha(cols, linhas, `Garantia_Top${GAR.top}_${GAR.ref.replace('/', '-')}${GAR.soAnalise ? '_em_analise' : ''}${GAR_CAT_TOP.cats ? '_categorias_filtradas' : ''}.csv`);
 }
 function garExportarEmail() {
@@ -2775,6 +2837,20 @@ function garPrazo(iso, dias) { const d = new Date(iso + 'T12:00:00'); d.setDate(
 // contagem e a O.S. volta ao aviso depois de OS_RETRAM_DIAS dias (pode ser retramitada de novo). Obs.: texto livre (os_obs).
 const OS_RETRAM = 'Retramitada', OS_RETRAM_DIAS = 5, OS_FECHADAS = ['Realizada', 'EXOC'];
 const OS_ROTULO = { Realizada: 'Realizada', EXOC: 'EXOC', Retramitada: 'Retramitada/Solicitada prioridade' };
+// As O.S. ficam no garItens com o mês da análise na chave e continuam no aviso nos meses seguintes. O aviso segue só a
+// Superintendência do cabeçalho (o filtro de grupos do mês novo escondia as O.S. de grupos ainda não liberados). Nome, grupo e
+// SUP vêm da base do mês; quando a matrícula não está no mês aberto, usa a cópia guardada na O.S. (garOSInfo).
+function garOSInfo(k, v, lig) {
+    const d = GAR.porLig.get(lig);
+    if (d) {
+        if (k.startsWith(GAR.ref + '|') && (v.os_nome !== d.nome || v.os_grupo !== d.grupo || v.os_sup !== d.sup)) {
+            v.os_nome = d.nome; v.os_grupo = d.grupo; v.os_sup = d.sup; garOSInfo.mudou = true;     // cópia para os meses seguintes
+        }
+        return d;
+    }
+    return v.os_nome || v.os_grupo || v.os_sup ? { nome: v.os_nome, grupo: v.os_grupo, sup: v.os_sup } : null;
+}
+const garOSVisivel = (info) => !info || ESTADO.sup === 'TODAS' || !info.sup || info.sup === ESTADO.sup;
 function garOS() {
     const hoje = new Date(garHoje() + 'T12:00:00');
     return Object.entries(garItens).filter(([, v]) => v.obs === OS_ABRIR && !OS_FECHADAS.includes(v.os_status)).map(([k, v]) => {
@@ -2782,8 +2858,8 @@ function garOS() {
         const data = v.os_data || (v.foto ? v.foto.slice(0, 10) : garHoje());
         const retram = v.os_status === OS_RETRAM && v.os_retram ? v.os_retram : null;
         const prazo = garPrazo(retram || data, retram ? OS_RETRAM_DIAS : OS_PRAZO_DIAS), dias = Math.round((hoje - prazo) / 86400000);
-        return { k, ref, lig, v, data, retram, prazo, dias, vencida: dias >= 0, d: GAR.porLig.get(lig) };
-    }).filter((o) => garVisivel(o.d)).sort((a, b) => b.dias - a.dias);
+        return { k, ref, lig, v, data, retram, prazo, dias, vencida: dias >= 0, d: garOSInfo(k, v, lig) };
+    }).filter((o) => garOSVisivel(o.d)).sort((a, b) => b.dias - a.dias);
 }
 // O.S. já encerradas (Realizada ou EXOC): marcar não apaga nada (só grava o status e a data), então elas continuam na
 // análise e podem voltar para o aviso ("↺ Voltar para o aviso") — sem guardar nada a mais
@@ -2791,13 +2867,17 @@ const garOSDataFim = (v) => v.os_realizada || v.os_exoc || '';
 function garOSRealizadas() {
     return Object.entries(garItens).filter(([, v]) => v.obs === OS_ABRIR && OS_FECHADAS.includes(v.os_status)).map(([k, v]) => {
         const i = k.lastIndexOf('|'), lig = k.slice(i + 1);
-        return { k, lig, v, data: v.os_data || (v.foto ? v.foto.slice(0, 10) : ''), d: GAR.porLig.get(lig) };
-    }).filter((o) => garVisivel(o.d)).sort((a, b) => String(garOSDataFim(b.v)).localeCompare(String(garOSDataFim(a.v))));
+        return { k, lig, v, data: v.os_data || (v.foto ? v.foto.slice(0, 10) : ''), d: garOSInfo(k, v, lig) };
+    }).filter((o) => garOSVisivel(o.d)).sort((a, b) => String(garOSDataFim(b.v)).localeCompare(String(garOSDataFim(a.v))));
 }
-const garOSObs = (o) => `<td class="gar-os-obs-td"><input class="gar-in gar-os-obs" data-k="${garEsc(o.k)}" value="${garEsc(o.v.os_obs || '')}" placeholder="Obs.:" aria-label="Observação da O.S. da matrícula ${garEsc(o.lig)}"></td>`;
+// Obs.: caixa de texto que quebra a linha e cresce com o texto (todo o texto visível, sem rolagem lateral)
+const garOSObs = (o) => `<td class="gar-os-obs-td"><textarea class="gar-in gar-os-obs" rows="1" data-k="${garEsc(o.k)}" placeholder="Obs.:" aria-label="Observação da O.S. da matrícula ${garEsc(o.lig)}">${garEsc(o.v.os_obs || '')}</textarea></td>`;
+const garOSObsAltura = (t) => { t.style.height = 'auto'; t.style.height = t.scrollHeight + 2 + 'px'; };
 function garDesenharOS() {
     const el = document.getElementById('garAvisoOS'); if (!el || !GAR.dados) return;
+    garOSInfo.mudou = false;
     const os = garOS(), vencidas = os.filter((o) => o.vencida), noPrazo = os.length - vencidas.length, feitas = garOSRealizadas();
+    if (garOSInfo.mudou) setTimeout(garSalvar, 0);              // guardou nome/grupo/SUP nas O.S. do mês (uma vez)
     const aba = document.querySelector('[data-gar-aba="resumo"]');
     if (aba) aba.innerHTML = 'Resumo de Ganhos' + (vencidas.length ? ` <span class="gar-badge" title="O.S. com prazo vencido">${vencidas.length}</span>` : '');
     if (!os.length && !feitas.length) { el.hidden = true; el.innerHTML = ''; return; }
@@ -2827,6 +2907,7 @@ function garDesenharOS() {
                 + `<td><select class="gar-in gar-os-sit" data-k="${garEsc(o.k)}" aria-label="Situação da O.S. da matrícula ${garEsc(o.lig)}"><option value="">Marcar como…</option>`
                 + `<option value="Realizada">✓ Realizada</option><option value="EXOC">EXOC</option><option value="${OS_RETRAM}">↻ Retramitada/Solicitada prioridade</option></select></td>${garOSObs(o)}</tr>`).join('')
             + '</tbody></table></div>' : '') + historico;
+    requestAnimationFrame(() => el.querySelectorAll('.gar-os-obs').forEach((t) => { if (t.offsetParent) garOSObsAltura(t); }));
 }
 document.addEventListener('change', (e) => {
     const sel = e.target.closest && e.target.closest('.gar-os-sit'); if (!sel || !sel.value) return;
@@ -2838,8 +2919,9 @@ document.addEventListener('change', (e) => {
 });
 document.addEventListener('input', (e) => {                    // Obs.: salva enquanto digita (sem redesenhar, para não perder o foco)
     const inp = e.target.closest && e.target.closest('.gar-os-obs'); if (!inp) return;
+    garOSObsAltura(inp);
     const it = garItens[inp.dataset.k]; if (!it) return;
-    it.os_obs = inp.value;
+    it.os_obs = inp.value.replace(/\n+/g, ' ');
     clearTimeout(GAR.tObsOS); GAR.tObsOS = setTimeout(garSalvar, 400);
 });
 document.addEventListener('click', (e) => {
@@ -2848,7 +2930,12 @@ document.addEventListener('click', (e) => {
     delete it.os_status; delete it.os_realizada; delete it.os_exoc;
     garSalvar(); garDesenharOS();
 });
-document.addEventListener('toggle', (e) => { if (e.target.classList && e.target.classList.contains('gar-os-hist')) GAR.osHistAberto = e.target.open; }, true);
+document.addEventListener('toggle', (e) => {
+    if (!e.target.classList || !e.target.classList.contains('gar-os-hist')) return;
+    GAR.osHistAberto = e.target.open;
+    if (e.target.open) e.target.querySelectorAll('.gar-os-obs').forEach(garOSObsAltura);      // altura certa ao abrir o histórico
+}, true);
+document.addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target.classList && e.target.classList.contains('gar-os-obs')) e.preventDefault(); });
 
 // --- Resumo de Ganhos ---
 function garTotais() {
@@ -2899,11 +2986,22 @@ function garRedesenhar() {
     garGrupos = gruposFiltro();
     garDesenharTop(); garDesenharVar(); garDesenharAnalise(); garDesenharResumo(); garDesenharOS();
 }
+var syncGarLiberadas = criaSync('garantiaLiberadas', 'Matrículas liberadas (manual)', () => garLibManual,
+    (m) => { garLibManual = m; try { localStorage.setItem(LS_PREFIXO + GAR_LIB_LS, JSON.stringify(garLibManual)); } catch (e) {} },
+    () => garRedesenhar());
+document.addEventListener('click', (e) => {
+    const b = e.target.closest && e.target.closest('.gar-lib-btn'); if (!b) return;
+    const k = `${GAR.ref}|${b.dataset.libLig}`;
+    if (garLibManual[k]) delete garLibManual[k]; else garLibManual[k] = new Date().toISOString();
+    try { localStorage.setItem(LS_PREFIXO + GAR_LIB_LS, JSON.stringify(garLibManual)); } catch (er) { /* sem armazenamento */ }
+    syncGarLiberadas.agendar();
+    garRedesenhar();
+});
 var syncGarantia = criaSync('garantia', 'Análise de garantia', () => garItens,
     (m) => { garItens = m; try { localStorage.setItem(LS_PREFIXO + GAR_LS, JSON.stringify(garItens)); } catch (e) {} },
     () => garRedesenhar(),
     () => !!(document.activeElement && document.activeElement.closest && document.activeElement.closest('#garTabelaAnalise, #garAvisoOS')));
-garCarregar().then(() => { garRedesenhar(); syncGarantia.puxar(); }).catch((e) => console.warn('Garantia: dados não carregaram', e));
+garCarregar().then(() => { garRedesenhar(); syncGarantia.puxar(); syncGarLiberadas.puxar(); }).catch((e) => console.warn('Garantia: dados não carregaram', e));
 
 // ===== Aba Plano de ação: tabela colada da planilha =====
 // Cada referência (mês) tem um plano { colunas, linhas, atualizado } na seção "plano" do ajustes_relatorio.json — o
@@ -2919,10 +3017,12 @@ function planoInfo() {
 }
 function planoAtual() {                          // [ref, plano] do mês; sem plano no mês, o último colado antes dele
     const inf = planoInfo(); if (!inf) return [null, null];
+    if (planoMapa[inf.ref] && planoMapa[inf.ref].vazio) return [null, null];   // "Limpar": o mês fica sem plano (não mostra o anterior)
     if (planoMapa[inf.ref] && planoMapa[inf.ref].linhas && planoMapa[inf.ref].linhas.length) return [inf.ref, planoMapa[inf.ref]];
-    const antes = Object.keys(planoMapa).filter((r) => planoMapa[r] && (planoMapa[r].linhas || []).length && planoRefChave(r) < planoRefChave(inf.ref))
+    // o mês anterior mais recente com plano ou limpo: se foi limpo, os meses seguintes também ficam sem plano
+    const antes = Object.keys(planoMapa).filter((r) => planoMapa[r] && ((planoMapa[r].linhas || []).length || planoMapa[r].vazio) && planoRefChave(r) < planoRefChave(inf.ref))
         .sort((a, b) => (planoRefChave(a) < planoRefChave(b) ? 1 : -1));
-    return antes.length ? [antes[0], planoMapa[antes[0]]] : [null, null];
+    return antes.length && !planoMapa[antes[0]].vazio ? [antes[0], planoMapa[antes[0]]] : [null, null];
 }
 function planoSalvar() {
     try { localStorage.setItem(LS_PREFIXO + PLANO_LS, JSON.stringify(planoMapa)); } catch (e) { /* ignora */ }
@@ -2967,14 +3067,25 @@ function planoDesenhar() {
         return true;
     });
     tab.tHead.innerHTML = '<tr>' + cols.map((c) => `<th>${garEsc(c)}</th>`).join('') + '</tr>';
-    tab.tBodies[0].innerHTML = linhas.map((l) => {
+    planoVisiveis = linhas;
+    const span = planoSpans(plano, linhas);              // células mescladas na planilha (só entre as linhas que aparecem)
+    // cor alternada por bloco: as linhas ligadas por uma célula mesclada (rowspan) ficam todas com a mesma cor
+    const fimBloco = linhas.map((_, r) => r);
+    span.forEach((lin, r) => lin.forEach((sp) => { if (sp && sp.rs > 1) fimBloco[r] = Math.max(fimBloco[r], r + sp.rs - 1); }));
+    const zebra = []; let cor = 0, ate = -1;
+    linhas.forEach((_, r) => { if (r > ate) { cor = 1 - cor; } ate = Math.max(ate, fimBloco[r]); zebra[r] = cor ? 'pl-z1' : 'pl-z2'; });
+    tab.tBodies[0].innerHTML = linhas.map((l, r) => {
         const st = iStatus >= 0 ? planoClasseStatus(l[iStatus]) : '';
         const prazo = iPrazo >= 0 ? planoDataDe(l[iPrazo]) : null, vencido = prazo && prazo < hoje && st !== 'pl-ok' && st !== 'pl-cancel';
-        return '<tr>' + cols.map((c, i) => {
+        return `<tr class="${zebra[r]}">` + cols.map((c, i) => {
+            const sp = span[r][i];
+            if (sp === 0) return '';                     // coberta por uma célula mesclada
+            const at = (sp && sp.rs > 1 ? ` rowspan="${sp.rs}"` : '') + (sp && sp.cs > 1 ? ` colspan="${sp.cs}"` : '')
+                + (sp && (sp.rs > 1 || sp.cs > 1) ? ' class="pl-mescla"' : '');
             const v = l[i] == null ? '' : String(l[i]);
-            if (i === iStatus && v) return `<td><span class="pl-status ${st}">${garEsc(v)}</span></td>`;
-            if (i === iPrazo && vencido) return `<td class="pl-vencido" title="Prazo vencido">${garEsc(v)}</td>`;
-            return `<td>${garEsc(v).replace(/\n/g, '<br>')}</td>`;
+            if (i === iStatus && v) return `<td${at}><span class="pl-status ${st}">${garEsc(v)}</span></td>`;
+            if (i === iPrazo && vencido) return `<td${at.replace(' class="pl-mescla"', '')} class="pl-vencido${at.includes('pl-mescla') ? ' pl-mescla' : ''}" title="Prazo vencido">${garEsc(v)}</td>`;
+            return `<td${at}>${garEsc(v).replace(/\n/g, '<br>')}</td>`;
         }).join('') + '</tr>';
     }).join('') || `<tr><td colspan="${cols.length}" class="gar-vazio">Nenhuma ação para os filtros escolhidos.</td></tr>`;
     const quando = plano.atualizado ? new Date(plano.atualizado).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }) : '';
@@ -2990,39 +3101,93 @@ function planoDesenhar() {
         + (quando ? ` · colado em ${quando}` : '') + (outro ? ` · <b>plano de ${garEsc(ref)}</b> (o mês atual ainda não tem plano colado)` : '');
     card.classList.toggle('tem-dados', linhas.length > 0);
 }
-function planoImportar(texto) {
-    const tab = garLerTSV(texto).map((l) => l.map((c) => String(c == null ? '' : c).trim()));
-    const linhas = tab.filter((l) => l.some((c) => c !== ''));
+// Células mescladas: o Excel copia junto uma versão HTML da seleção, com rowspan/colspan. Dela sai a grade com o valor da
+// célula mesclada repetido em todas as linhas que ela cobre (filtros e PDF continuam certos) e a lista das mesclas
+// [linha, coluna, linhas, colunas], refeita na tela (planoSpans). Sem HTML (outro programa), vale o texto (TSV).
+function planoLerHtml(html) {
+    const doc = new DOMParser().parseFromString(html, 'text/html'), t = doc.querySelector('table');
+    if (!t) return null;
+    const grade = [], mesclas = [], texto = (td) => {
+        const c = td.cloneNode(true); c.querySelectorAll('br').forEach((b) => b.replaceWith('\n'));
+        return c.textContent.replace(/\u00a0/g, ' ').split('\n').map((x) => x.replace(/[ \t\r]+/g, ' ').trim()).filter(Boolean).join('\n');
+    };
+    const visivel = (el) => !/display\s*:\s*none/i.test(el.getAttribute('style') || '');
+    Array.from(t.rows).filter(visivel).forEach((tr, r) => {
+        grade[r] = grade[r] || [];
+        let c = 0;
+        Array.from(tr.cells).filter(visivel).forEach((td) => {
+            while (grade[r][c] !== undefined) c++;
+            const rs = Math.max(1, +td.rowSpan || 1), cs = Math.max(1, +td.colSpan || 1), v = texto(td);
+            for (let i = 0; i < rs; i++) for (let j = 0; j < cs; j++) (grade[r + i] = grade[r + i] || [])[c + j] = v;
+            if (rs > 1 || cs > 1) mesclas.push([r, c, rs, cs]);
+            c += cs;
+        });
+    });
+    const n = Math.max(0, ...grade.map((l) => l.length));
+    return { grade: grade.map((l) => Array.from({ length: n }, (_, i) => (l[i] == null ? '' : l[i]))), mesclas };
+}
+// spans para desenhar: {rs, cs} na célula que começa a mescla, 0 nas cobertas, null nas normais — só entre as linhas visíveis
+function planoSpans(plano, linhas) {
+    const pos = new Map(linhas.map((l, r) => [l, r])), sp = linhas.map((l) => l.map(() => null));
+    (plano.mesclas || []).forEach(([r0, c0, rs, cs]) => {
+        const vis = []; for (let r = r0; r < r0 + rs; r++) { const l = plano.linhas[r]; if (l && pos.has(l)) vis.push(pos.get(l)); }
+        if (!vis.length || (vis.length < 2 && cs < 2)) return;
+        vis.forEach((r, k) => { for (let j = 0; j < cs; j++) if (c0 + j < sp[r].length) sp[r][c0 + j] = 0; });
+        sp[vis[0]][c0] = { rs: vis.length, cs: Math.min(cs, sp[vis[0]].length - c0) };
+    });
+    return sp;
+}
+let planoVisiveis = [];
+function planoImportar(texto, html) {
+    const lido = html ? planoLerHtml(html) : null;
+    const tab = (lido ? lido.grade : garLerTSV(texto)).map((l) => l.map((c) => String(c == null ? '' : c).trim()));
+    const idxLinhas = tab.map((l, i) => (l.some((c) => c !== '') ? i : -1)).filter((i) => i >= 0);
+    const linhas = idxLinhas.map((i) => tab[i]);
     if (linhas.length < 2) { avisoNuvem('Cole as linhas da planilha com o cabeçalho (pelo menos o cabeçalho e uma linha).', true); return; }
     let cab = linhas[0];
     const usadas = cab.map((c, i) => c !== '' || linhas.slice(1).some((l) => (l[i] || '') !== ''));   // tira colunas vazias
     const pega = (l) => cab.map((_, i) => l[i] || '').filter((_, i) => usadas[i]);
     const colunas = pega(cab).map((c, i) => c || `Coluna ${i + 1}`), corpo = linhas.slice(1).map(pega);
+    // mesclas no corpo, com linhas e colunas renumeradas (sem o cabeçalho, as linhas vazias e as colunas vazias)
+    const novaLinha = new Map(idxLinhas.slice(1).map((i, k) => [i, k])), novaCol = [];
+    usadas.forEach((u, i) => { novaCol[i] = u ? novaCol.filter((x) => x >= 0).length : -1; });
+    const mesclas = [];
+    (lido ? lido.mesclas : []).forEach(([r, c, rs, cs]) => {
+        const rsN = Array.from({ length: rs }, (_, k) => novaLinha.get(r + k)).filter((x) => x !== undefined);
+        const csN = Array.from({ length: cs }, (_, k) => novaCol[c + k]).filter((x) => x !== undefined && x >= 0);
+        if (rsN.length && csN.length && (rsN.length > 1 || csN.length > 1)) mesclas.push([rsN[0], csN[0], rsN.length, csN.length]);
+    });
     const inf = planoInfo();
     const ja = planoMapa[inf.ref] && (planoMapa[inf.ref].linhas || []).length;
-    if (!confirm(`${ja ? 'Substituir' : 'Salvar'} o plano de ação de ${inf.mes} por ${corpo.length} linha(s) e ${colunas.length} coluna(s)?\n\nColunas: ${colunas.join(' · ')}`)) return;
+    if (!confirm(`${ja ? 'Substituir' : 'Salvar'} o plano de ação de ${inf.mes} por ${corpo.length} linha(s) e ${colunas.length} coluna(s)?`
+        + (mesclas.length ? `\n${mesclas.length} célula(s) mesclada(s) reconhecida(s).` : '') + `\n\nColunas: ${colunas.join(' · ')}`)) return;
     planoMapa[inf.ref] = { colunas, linhas: corpo, atualizado: new Date().toISOString() };
+    if (mesclas.length) planoMapa[inf.ref].mesclas = mesclas;
     planoSalvar(); planoDesenhar();
     const msg = document.getElementById('planoMsg'); if (msg) msg.textContent = `${corpo.length} linha(s) coladas.`;
 }
 document.addEventListener('paste', (e) => {
     if (e.target.id !== 'planoColar') return;
     e.preventDefault();
-    planoImportar((e.clipboardData || window.clipboardData).getData('text'));
+    const cb = e.clipboardData || window.clipboardData;
+    planoImportar(cb.getData('text'), cb.getData && /<table/i.test(cb.getData('text/html') || '') ? cb.getData('text/html') : null);
     e.target.value = '';
 });
 document.addEventListener('click', (e) => {
     if (e.target.id === 'planoLimpar') {
-        const inf = planoInfo();
-        if (!planoMapa[inf.ref]) { avisoNuvem(`O mês ${inf.mes} não tem plano colado.`, true); return; }
-        if (!confirm(`Apagar o plano de ação de ${inf.mes}?`)) return;
-        delete planoMapa[inf.ref]; planoSalvar(); planoDesenhar(); return;
+        // o mês fica sem plano: apaga o colado nele e deixa de mostrar o último plano de um mês anterior
+        const inf = planoInfo(), [ref, plano] = planoAtual();
+        if (!plano) { avisoNuvem(`O mês ${inf.mes} já está sem plano de ação.`, true); return; }
+        const doMes = ref === inf.ref;
+        if (!confirm(doMes ? `Apagar o plano de ação de ${inf.mes}?`
+            : `${inf.mes} ainda não tem plano colado e está mostrando o plano de ${ref}.\n\nDeixar ${inf.mes} sem plano de ação? (o plano de ${ref} continua salvo no mês dele)`)) return;
+        planoMapa[inf.ref] = { colunas: [], linhas: [], vazio: true, atualizado: new Date().toISOString() };
+        planoSalvar(); planoDesenhar(); return;
     }
     if (e.target.id === 'planoBaixar') {
         const [ref, plano] = planoAtual(); if (!plano) return;
-        const t = document.getElementById('planoTabela');
-        const linhas = Array.from(t.tBodies[0].rows).filter((r) => !r.querySelector('.gar-vazio')).map((r) => Array.from(r.cells).map((c) => c.innerText));
-        baixarPlanilha(plano.colunas, linhas, `Plano_de_acao_${String(ref).replace('/', '-')}.csv`);
+        // as linhas na tela, com o valor da célula mesclada em cada linha que ela cobre
+        baixarPlanilha(plano.colunas, planoVisiveis.map((l) => plano.colunas.map((_, i) => (l[i] == null ? '' : String(l[i])))), `Plano_de_acao_${String(ref).replace('/', '-')}.csv`);
     }
 });
 var syncPlano = criaSync('plano', 'Plano de ação', () => planoMapa,
@@ -3236,7 +3401,7 @@ function opAbertoFat(D, L) {
 }
 
 // ---- Acompanhamento por semana: grupos lidos em cada semana do mês, contra o orçado SUP e o mês anterior ----
-// Semana = semana do calendário (segunda a domingo) da primeira data de leitura do grupo no cronograma do mês vigente.
+// Semana = semana do calendário (domingo a sábado) da primeira data de leitura do grupo no cronograma do mês vigente.
 let opSemanasAbertas = null;                    // semanas abertas na tela (null = abre só a última com grupos)
 function opGrupos(D) {
     const blocos = Array.from(document.querySelectorAll('#view-tabelas .orc-ciclo-bloco'));
@@ -3255,9 +3420,9 @@ function opGrupos(D) {
         g.o = (g.o || 0) + (parseFloat(tr.dataset.fatAnterior) || 0);
     });
     let datas = {}; try { datas = JSON.parse((document.getElementById('opDatasLeitura') || {}).textContent || '{}') || {}; } catch (e) { datas = {}; }
-    const semanaDe = (iso) => {                 // {n, ini, fim} da semana (segunda a domingo) dentro do mês
+    const semanaDe = (iso) => {                 // {n, ini, fim} da semana (domingo a sábado) dentro do mês
         const d = new Date(iso + 'T12:00:00'), p = new Date(d.getFullYear(), d.getMonth(), 1, 12);
-        const desl = (p.getDay() + 6) % 7;      // dias do dia 1 até a segunda anterior
+        const desl = p.getDay();                // semana de domingo a sábado: dias do dia 1 até o domingo anterior
         const n = Math.floor((d.getDate() + desl - 1) / 7) + 1;
         const ult = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
         const ini = Math.max(1, (n - 1) * 7 - desl + 1), fim = Math.min(ult, n * 7 - desl);
@@ -3282,7 +3447,8 @@ function opGrupos(D) {
 }
 function opBlocoGrupos(D, G) {
     if (!G.grupos.length) return '<p class="op-vazio">Nenhum grupo marcado.</p>';
-    if (opSemanasAbertas === null) { const ult = G.semanas.filter((s) => s.n !== 99).pop(); opSemanasAbertas = new Set(ult ? [ult.n] : []); }
+    // ao abrir: as duas últimas semanas já vêm abertas (o clique na semana abre/fecha as outras)
+    if (opSemanasAbertas === null) opSemanasAbertas = new Set(G.semanas.filter((s) => s.n !== 99).slice(-2).map((s) => s.n));
     const v = (x) => opMoeda(x, 2);
     const cols = (o) => `<td class="num op-forte">${v(o.r)}</td>`
         + `<td class="num op-col-val op-apagado">${o.o != null ? v(o.o) : '–'}</td><td class="num">${o.o != null ? opSeta(opVar(o.r, o.o), '') : '–'}</td>`
@@ -3349,21 +3515,24 @@ function opBlocoVolumes(D) {
 }
 
 // ---- Top 5: maiores quedas e aumentos de faturamento (água) entre os clientes do Top 100 ----
-// chave pessoal (navegador): só matrículas liberadas = Situação Conta do mês diferente de "Em análise" (base da aba Garantia)
+// chave pessoal (navegador): só matrículas liberadas = fora de "em análise" (Situação Conta EM ANALISE ou lançamento RETIDA, garEmAnalise)
 let opSoLiberadas = false;
 try { opSoLiberadas = localStorage.getItem(LS_PREFIXO + 'faturamento_op_top_liberadas') === '1'; } catch (e) { opSoLiberadas = false; }
 const opLig = (v) => String(v == null ? '' : v).trim().replace(/\.0+$/, '');
 function opTop5(D, tipo) {
     const chave = `${tipo}-agua`, d = lerJson('top100-dados');
     const tirar5 = (itens) => itens.sort((a, b) => b.v - a.v).slice(0, 5);
+    const pctFat = (at, ant) => (ant > 0 && at != null && isFinite(at) ? at / ant - 1 : null);   // faturamento do mês contra o anterior
     if (d && d[chave]) {
         // as mesmas linhas da tabela Top 100 da aba Análise (SUP e grupos marcados); com a chave, as em análise saem antes do corte de 100
         const cols = d[chave].columns, ix = (n) => cols.indexOf(n), iSup = ix('Superintendência'), iG = ix('Grupo'), iL = ix('N. Ligação'),
             iN = ix('Nome_Cliente'), iV = ix((tipo === 'aumento' ? 'Aumento' : 'Queda') + '_Valor_R$'), grupos = gruposFiltro();
+        const iVals = cols.map((c, i) => (/^Valor R\$ /.test(c) ? i : -1)).filter((i) => i >= 0), [iAt, iAnt] = iVals;   // atual, anterior
         const liberada = (l) => !opSoLiberadas || !garEmAnalise(GAR.porLig.get(opLig(l[iL])));
         const linhas = d[chave].data.filter((l) => (D.sup === 'TODAS' || iSup < 0 || l[iSup] === D.sup) && (!grupos || grupos.has(normGrupo(l[iG]))) && liberada(l))
             .slice(0, 100);
-        return tirar5(linhas.map((l) => ({ nome: String(l[iN] == null ? '' : l[iN]).trim(), grupo: iG >= 0 ? normGrupo(l[iG]) : '', v: Math.abs(+l[iV] || 0) })));
+        return tirar5(linhas.map((l) => ({ nome: String(l[iN] == null ? '' : l[iN]).trim(), grupo: iG >= 0 ? normGrupo(l[iG]) : '', v: Math.abs(+l[iV] || 0),
+            pct: iAnt === undefined ? null : pctFat(+l[iAt], +l[iAnt]) })));
     }
     const t = document.querySelector(`#view-analise .sup-top-bloco[data-sup="${D.sup}"] table[data-top="${chave}"]`)
         || document.querySelector(`.sup-top-bloco[data-sup="${D.sup}"] table[data-top="${chave}"]`)
@@ -3372,15 +3541,23 @@ function opTop5(D, tipo) {
     const cab = Array.from(t.tHead.rows[0].cells).map((c) => planoNorm(c.textContent));
     const iNome = cab.findIndex((c) => /NOME/.test(c)), iGrupo = cab.findIndex((c) => /^GRUPO/.test(c)), iVal = cab.length - 1,
         iLig = cab.findIndex((c) => /LIGA/.test(c));
+    const iVals = cab.map((c, i) => (/^VALOR R\$ /.test(c) ? i : -1)).filter((i) => i >= 0), [iAt, iAnt] = iVals;
     return tirar5(Array.from(t.tBodies[0].rows).filter((tr) => tr.style.display !== 'none' && tr.cells.length === cab.length)
         .filter((tr) => !opSoLiberadas || iLig < 0 || !garEmAnalise(GAR.porLig.get(opLig(tr.cells[iLig].textContent))))
-        .map((tr) => ({ nome: tr.cells[iNome].textContent.trim(), grupo: iGrupo >= 0 ? tr.cells[iGrupo].textContent.trim() : '', v: Math.abs(opNum(tr.cells[iVal].textContent) || 0) })));
+        .map((tr) => ({ nome: tr.cells[iNome].textContent.trim(), grupo: iGrupo >= 0 ? tr.cells[iGrupo].textContent.trim() : '', v: Math.abs(opNum(tr.cells[iVal].textContent) || 0),
+            pct: iAnt === undefined ? null : pctFat(opNum(tr.cells[iAt].textContent), opNum(tr.cells[iAnt].textContent)) })));
+}
+// % do faturamento do cliente contra o mês anterior, ao lado do valor (sem faturamento no mês anterior: "novo")
+function opTopPct(p) {
+    if (p == null) return '<span class="op-top-pct op-top-novo" title="Sem faturamento no mês anterior">novo</span>';
+    const t = (p > 0 ? '+' : '') + (p * 100).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + '%';
+    return `<span class="op-top-pct ${p < 0 ? 'neg' : 'pos'}" title="Faturamento do cliente contra o mês anterior">${t}</span>`;
 }
 function opBlocoTop(D) {
     // o nome comprido quebra linha; o grupo e o valor ficam sempre inteiros, em colunas fixas
     const lista = (tit, cls, itens) => `<div class="op-top ${cls}"><div class="op-top-tit">${tit}</div>`
         + (itens.length ? itens.map((x, i) => `<div class="op-top-lin"><span class="op-top-nome" title="${garEsc(x.nome)}">${i + 1}. ${garEsc(x.nome)}</span>`
-            + `<span class="op-top-grupo">${x.grupo ? `Grupo ${garEsc(x.grupo)}` : ''}</span><b>${opMoeda(x.v, 2)}</b></div>`).join('')
+            + `<span class="op-top-grupo">${x.grupo ? `Grupo ${garEsc(x.grupo)}` : ''}</span><b>${opMoeda(x.v, 2)}</b>${opTopPct(x.pct)}</div>`).join('')
             : `<p class="op-vazio">${opSoLiberadas && !GAR.dados ? 'Carregando as matrículas…' : 'Sem clientes.'}</p>`) + '</div>';
     const m = opMesCurto((opEditor() || { dataset: {} }).dataset.ref || '');
     return `<div class="op-tops">${lista('Maiores aumentos de faturamento — ' + garEsc(m), 'op-top-pos', opTop5(D, 'aumento'))}`
@@ -3830,3 +4007,396 @@ var syncGC = criaSync('gc', 'Matrículas GC', () => gcExtras,
     () => !!(document.activeElement && document.activeElement.id === 'gcEntrada'));
 gcDesenhar();
 syncGC.puxar();
+
+// ===== Aba Diretas: orçados por grupo — todos os arquivos de orçado × peso dos grupos (dados de orcado_ciclo.py) =====
+// Mês da análise e os seguintes que estiverem nas planilhas; serviço, métrica, mês e grupos escolhidos aqui (o filtro de grupos
+// do cabeçalho não vale nesta tabela); a Superintendência do cabeçalho escolhe quais grupos aparecem na lista.
+let orcGruposLinhas = null, orcGruposFora = new Set();             // grupos desmarcados no filtro próprio (os novos vêm marcados)
+try { orcGruposFora = new Set(JSON.parse(localStorage.getItem(LS_PREFIXO + 'faturamento_orc_grupos_fora') || '[]')); } catch (e) { orcGruposFora = new Set(); }
+const orcGruposGuarda = () => { try { localStorage.setItem(LS_PREFIXO + 'faturamento_orc_grupos_fora', JSON.stringify([...orcGruposFora])); } catch (e) { /* sem armazenamento */ } };
+function orcGruposDesenhar() {
+    const d = lerJson('orc-grupos-dados'), tab = document.getElementById('orcGruposTabela');
+    if (!d || !tab) return;
+    const selMes = document.getElementById('orcGruposMes');
+    if (!selMes.options.length) {
+        const nome = (r) => { const [m, a] = String(r).split('/'); return ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'][+m - 1] + '/' + a; };
+        selMes.innerHTML = d.meses.map((r) => `<option value="${garEsc(r)}">${garEsc(nome(r))}${r === d.mesAtual ? ' (mês da análise)' : ''}</option>`).join('');
+        selMes.value = d.meses.includes(d.mesAtual) ? d.mesAtual : d.meses[0];
+    }
+    const ref = selMes.value, serv = document.getElementById('orcGruposServ').value, met = document.getElementById('orcGruposMetrica').value;
+    const chave = { valor: 'd', volume: 'vol', economias: 'eco' }[met], servs = serv === 'AE' ? ['A', 'E'] : [serv];
+    let mapaSup = {};
+    try { mapaSup = JSON.parse(document.getElementById('info-filtros').textContent).grupoSup || {}; } catch (e) { mapaSup = {}; }
+    const supDe = {}; Object.entries(mapaSup).forEach(([g, sp]) => { supDe[normGrupo(g)] = sp; });
+    const todos = Array.from(new Set(servs.flatMap((sv) => Object.keys((d.pesos[sv] || {})[met] || {})).map(normGrupo)))
+        .sort((a, b) => a.localeCompare(b, 'pt-BR', { numeric: true }));
+    const daSup = todos.filter((g) => ESTADO.sup === 'TODAS' || supDe[g] === ESTADO.sup);
+    const visiveis = daSup.filter((g) => !orcGruposFora.has(g));
+    const lista = document.getElementById('orcGruposLista'), btn = document.getElementById('orcGruposBtnGrupos');
+    if (lista && btn) {
+        lista.innerHTML = `<label><input type="checkbox" data-orc-g="*" ${visiveis.length === daSup.length ? 'checked' : ''}> <b>Selecionar todos</b></label><hr>`
+            + daSup.map((g) => `<label><input type="checkbox" data-orc-g="${garEsc(g)}" ${orcGruposFora.has(g) ? '' : 'checked'}> Grupo ${garEsc(g)}</label>`).join('');
+        btn.textContent = `Grupos: ${visiveis.length === daSup.length ? 'todos' : `${visiveis.length} de ${daSup.length}`} ▾`;
+    }
+    const peso = (sv, g) => { const p = (d.pesos[sv] || {})[met] || {}; let t = 0; Object.entries(p).forEach(([k, v]) => { if (normGrupo(k) === g) t += v; }); return t; };
+    const valor = (f, sv, g) => { const o = (d.orc[f] || {})[ref]; const v = o ? o[chave + sv] : null; return v == null ? null : v * peso(sv, g); };
+    const fontes = d.fontes.filter((f) => (d.orc[f] || {})[ref]);
+    const dec = met === 'valor' ? 2 : 0, fmt = (v) => (v == null ? '–' : (met === 'valor' ? 'R$ ' : '') + v.toLocaleString('pt-BR', { minimumFractionDigits: dec, maximumFractionDigits: dec }));
+    const pct = (v) => (v * 100).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '%';
+    const colPeso = servs.map((sv) => `<th class="num">Peso ${sv === 'A' ? 'água' : 'esgoto'}</th>`).join('');
+    tab.tHead.innerHTML = `<tr><th>Grupo</th><th>SUP</th>${colPeso}${fontes.map((f) => `<th class="num">Orçado<br>${garEsc(f)}</th>`).join('')}</tr>`;
+    const linhas = visiveis.map((g) => {
+        const vals = fontes.map((f) => { const xs = servs.map((sv) => valor(f, sv, g)); return xs.every((x) => x == null) ? null : xs.reduce((a, x) => a + (x || 0), 0); });
+        return { g, sup: supDe[g] || '', pesos: servs.map((sv) => peso(sv, g)), vals };
+    });
+    const tot = fontes.map((_, i) => linhas.reduce((a, l) => a + (l.vals[i] || 0), 0));
+    const totPeso = servs.map((_, j) => linhas.reduce((a, l) => a + l.pesos[j], 0));
+    tab.tBodies[0].innerHTML = linhas.map((l) => `<tr><td>Grupo ${garEsc(l.g)}</td><td>${garEsc(l.sup)}</td>${l.pesos.map((p) => `<td class="num">${pct(p)}</td>`).join('')}`
+        + l.vals.map((v) => `<td class="num">${fmt(v)}</td>`).join('') + '</tr>').join('')
+        + (linhas.length ? `<tr class="dre-forte"><td>Total${visiveis.length < daSup.length ? ` (${visiveis.length} de ${daSup.length} grupos)` : ''}</td><td></td>${totPeso.map((p) => `<td class="num">${pct(p)}</td>`).join('')}`
+            + tot.map((v) => `<td class="num">${fmt(v)}</td>`).join('') + '</tr>' : `<tr><td colspan="${2 + servs.length + fontes.length}">Nenhum grupo marcado no filtro Grupos.</td></tr>`);
+    const rotServ = { A: 'Água', E: 'Esgoto', AE: 'Água + esgoto' }[serv], rotMet = { valor: 'Faturamento (R$)', volume: 'Volume (m³)', economias: 'Economias' }[met];
+    orcGruposLinhas = { ref, rotServ, rotMet, cab: ['Grupo', 'SUP'].concat(servs.map((sv) => `Peso ${sv === 'A' ? 'água' : 'esgoto'}`), fontes.map((f) => `Orçado ${f}`)),
+        linhas: linhas.map((l) => [l.g, l.sup].concat(l.pesos.map((p) => Math.round(p * 1e6) / 1e6), l.vals.map((v) => (v == null ? '' : Math.round(v * 100) / 100)))) };
+}
+document.addEventListener('change', (e) => {
+    if (!e.target.closest || !e.target.closest('.orc-grupos-filtros')) return;
+    const g = e.target.dataset && e.target.dataset.orcG;
+    if (g === '*') {                                     // Selecionar todos: marca/desmarca os grupos da lista (da SUP escolhida)
+        document.querySelectorAll('#orcGruposLista input[data-orc-g]').forEach((c) => { if (c.dataset.orcG !== '*') { if (e.target.checked) orcGruposFora.delete(c.dataset.orcG); else orcGruposFora.add(c.dataset.orcG); } });
+        orcGruposGuarda();
+    } else if (g) { if (e.target.checked) orcGruposFora.delete(g); else orcGruposFora.add(g); orcGruposGuarda(); }
+    orcGruposDesenhar();
+});
+document.addEventListener('click', (e) => {
+    const lista = document.getElementById('orcGruposLista'); if (!lista || !e.target.closest) return;
+    if (e.target.closest('#orcGruposBtnGrupos')) { lista.hidden = !lista.hidden; document.getElementById('orcGruposBtnGrupos').setAttribute('aria-expanded', String(!lista.hidden)); return; }
+    if (!lista.hidden && !e.target.closest('.orc-grupos-dd')) { lista.hidden = true; document.getElementById('orcGruposBtnGrupos').setAttribute('aria-expanded', 'false'); }
+});
+document.addEventListener('click', (e) => {
+    if (!e.target.closest || !e.target.closest('#orcGruposBaixar') || !orcGruposLinhas) return;
+    const o = orcGruposLinhas;
+    baixarPlanilha(o.cab, o.linhas, `Orcados_por_grupo_${o.rotServ}_${o.rotMet}_${o.ref}`.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^A-Za-z0-9_-]+/g, '_') + '.xlsx');
+});
+
+
+// ===== Aba Análise: variação do faturamento direto por categoria ou cidade (dados de analises.py) =====
+// Visão (categoria/cidade) e serviço (total, água, esgoto) escolhidos aqui; Superintendência e Grupo seguem o cabeçalho.
+let varCatOrdem = { col: 'fat_at', desc: true }, varCatLinhas = null;
+function varCatDesenhar() {
+    const d = lerJson('var-cat-dados'), tab = document.getElementById('varCatTabela');
+    if (!d || !tab) return;
+    const visao = document.getElementById('varCatVisao').value, serv = document.getElementById('varCatServ').value;
+    const iDim = visao === 'cat' ? 3 : 4, nomes = d.dims[visao], grupos = gruposFiltro(), sup = ESTADO.sup;
+    const okG = d.dims.g.map((g) => !grupos || grupos.has(normGrupo(g))), okS = d.dims.sup.map((x) => sup === 'TODAS' || x === sup);
+    // soma por nome × mês × serviço: [valor, economias, volume, acima do mínimo]
+    const soma = new Map(), novo = () => [[[0, 0, 0, 0], [0, 0, 0, 0]], [[0, 0, 0, 0], [0, 0, 0, 0]]];
+    d.linhas.forEach((l) => {
+        const [m, g, sp] = l; if (!okG[g] || !okS[sp]) return;
+        const nome = nomes[l[iDim]]; if (!soma.has(nome)) soma.set(nome, novo());
+        const c = soma.get(nome)[m][l[5]]; c[0] += l[6]; c[1] += l[7] || 0; c[2] += l[8] || 0; c[3] += l[9] || 0;
+    });
+    // métricas de um mês pelo serviço escolhido (Total como no Resumo: economias = maior entre água e esgoto, volume = da água)
+    const met = (mes) => {
+        const [a, e] = mes;
+        const fat = serv === 'A' ? a[0] : serv === 'E' ? e[0] : a[0] + e[0];
+        const eco = serv === 'A' ? a[1] : serv === 'E' ? e[1] : Math.max(a[1], e[1]);
+        const vol = serv === 'E' ? e[2] : a[2];
+        return { fat, eco, vol, tar: vol ? fat / vol : null, aci: a[3] };
+    };
+    const K = ['fat', 'eco', 'vol', 'tar', 'aci'];
+    const monta = (nome, x) => {
+        const an = met(x[0]), at = met(x[1]), o = { nome };
+        K.forEach((k) => { o[k + '_an'] = an[k]; o[k + '_at'] = at[k]; o[k + '_pct'] = an[k] ? (at[k] == null ? null : at[k] / an[k] - 1) : null; });
+        o.fat_dif = at.fat - an.fat;
+        return o;
+    };
+    const linhas = Array.from(soma.entries()).map(([n, x]) => monta(n, x)).filter((o) => Math.abs(o.fat_an) > 0.004 || Math.abs(o.fat_at) > 0.004 || o.eco_an || o.eco_at);
+    const totX = novo();
+    soma.forEach((x) => [0, 1].forEach((m) => [0, 1].forEach((sv) => [0, 1, 2, 3].forEach((k) => { totX[m][sv][k] += x[m][sv][k]; }))));
+    const tot = monta('Total', totX);
+    linhas.forEach((o) => { o.part = tot.fat_at ? o.fat_at / tot.fat_at : null; });
+    const { col, desc } = varCatOrdem;
+    linhas.sort((x, y) => { const a = x[col], b = y[col];
+        if (col === 'nome') return desc ? String(b).localeCompare(String(a), 'pt-BR') : String(a).localeCompare(String(b), 'pt-BR');
+        return ((a == null ? -Infinity : a) - (b == null ? -Infinity : b)) * (desc ? -1 : 1); });
+    const n = (v, dc) => (v == null ? '–' : v.toLocaleString('pt-BR', { minimumFractionDigits: dc, maximumFractionDigits: dc }));
+    const pc = (v) => (v == null ? '–' : (v > 0 ? '+' : '') + (v * 100).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + '%');
+    const cls = (v) => (v != null && v < -0.0005 ? ' var-neg' : '');
+    const A = d.anterior, T = d.atual;
+    // [chave, rótulo, formato, grupo do cabeçalho]
+    const cols = [['fat_an', A, (v) => n(v, 0), 'Faturamento (R$)'], ['fat_at', T, (v) => n(v, 0), 'Faturamento (R$)'], ['fat_dif', 'Δ R$', (v) => n(v, 0), 'Faturamento (R$)'], ['fat_pct', 'Δ %', pc, 'Faturamento (R$)'],
+        ['eco_an', A, (v) => n(v, 0), 'Economias'], ['eco_at', T, (v) => n(v, 0), 'Economias'], ['eco_pct', 'Δ %', pc, 'Economias'],
+        ['vol_an', A, (v) => n(v, 0), 'Volume faturado (m³)'], ['vol_at', T, (v) => n(v, 0), 'Volume faturado (m³)'], ['vol_pct', 'Δ %', pc, 'Volume faturado (m³)'],
+        ['tar_an', A, (v) => n(v, 2), 'Tarifa média (R$/m³)'], ['tar_at', T, (v) => n(v, 2), 'Tarifa média (R$/m³)'], ['tar_pct', 'Δ %', pc, 'Tarifa média (R$/m³)'],
+        ['aci_an', A, (v) => n(v, 0), 'Econ. acima do mínimo'], ['aci_at', T, (v) => n(v, 0), 'Econ. acima do mínimo'], ['aci_pct', 'Δ %', pc, 'Econ. acima do mínimo'],
+        ['part', `Part. ${T}`, (v) => (v == null ? '–' : pc(v).replace('+', '')), '']];
+    const delta = (k) => /_(dif|pct)$/.test(k);
+    const seta = (k) => (k === col ? (desc ? ' ▼' : ' ▲') : '');
+    const grupos1 = []; cols.forEach(([, , , g]) => { const u = grupos1[grupos1.length - 1]; if (u && u.g === g) u.n++; else grupos1.push({ g, n: 1 }); });
+    const rotNome = visao === 'cat' ? 'Categoria' : 'Cidade';
+    tab.tHead.innerHTML = `<tr><th rowspan="2" class="ordenavel" data-var-ord="nome" title="Ordenar">${rotNome}${seta('nome')}</th>`
+        + grupos1.map((x) => (x.g ? `<th colspan="${x.n}" class="var-grupo">${garEsc(x.g)}</th>` : `<th rowspan="2" class="ordenavel num" data-var-ord="part" title="Ordenar">${garEsc(cols[cols.length - 1][1])}${seta('part')}</th>`)).join('') + '</tr>'
+        + '<tr>' + cols.filter(([, , , g]) => g).map(([k, t]) => `<th class="ordenavel num${delta(k) ? ' var-delta' : ''}" data-var-ord="${k}" title="Ordenar">${garEsc(t)}${seta(k)}</th>`).join('') + '</tr>';
+    const linha = (o, forte) => `<tr${forte ? ' class="dre-forte"' : ''}><td>${garEsc(o.nome)}</td>`
+        + cols.map(([k, , f]) => `<td class="num${delta(k) ? ' var-delta' + cls(o[k]) : ''}">${k === 'part' && forte ? '100,0%' : f(o[k])}</td>`).join('') + '</tr>';
+    tab.tBodies[0].innerHTML = linhas.map((o) => linha(o)).join('')
+        + (linhas.length ? linha(tot, true) : `<tr><td colspan="${cols.length + 1}">Sem faturamento para os filtros escolhidos.</td></tr>`);
+    const rot = { T: 'Total', A: 'Agua', E: 'Esgoto' }[serv];
+    varCatLinhas = { nome: `Variacao_faturamento_${visao === 'cat' ? 'categoria' : 'cidade'}_${rot}_${d.atual}`,
+        cab: [rotNome].concat(cols.map(([k, t, , g]) => (g ? `${g} ${t}` : t))),
+        linhas: linhas.concat([tot]).map((o) => [o.nome].concat(cols.map(([k]) => {
+            const v = k === 'part' && o === tot ? 1 : o[k];
+            return v == null ? '' : Math.round(v * (/pct|part/.test(k) ? 10000 : 100)) / (/pct|part/.test(k) ? 10000 : 100); }))) };
+}
+document.addEventListener('change', (e) => { if (e.target.id === 'varCatVisao' || e.target.id === 'varCatServ') varCatDesenhar(); });
+document.addEventListener('click', (e) => {
+    if (!e.target.closest) return;
+    const th = e.target.closest('#varCatTabela th[data-var-ord]');
+    if (th) { const k = th.dataset.varOrd; varCatOrdem = { col: k, desc: varCatOrdem.col === k ? !varCatOrdem.desc : k !== 'nome' }; varCatDesenhar(); return; }
+    if (e.target.closest('#varCatBaixar') && varCatLinhas) baixarPlanilha(varCatLinhas.cab, varCatLinhas.linhas, varCatLinhas.nome.replace(/[^A-Za-z0-9_-]+/g, '_') + '.xlsx');
+});
+
+// ===== Aba Fechamento: números do BI (print colado e lido por OCR, conferido antes de salvar) =====
+// Fica na seção "fechamento" do ajustes_relatorio.json, por mês × superintendência (a do cabeçalho). As tabelas comparam com o
+// orçado escolhido na própria aba (dados de fechamento.py: todas as planilhas e meses da pasta). Sem forecast e sem plano de ação.
+const FECH_LS = 'faturamento_fechamento';
+let fechMapa = {};
+try { fechMapa = JSON.parse(localStorage.getItem(LS_PREFIXO + FECH_LS) || '{}') || {}; } catch (e) { fechMapa = {}; }
+const FECH_CLASSES = [['CORTE', 'CORTE DE ÁGUA'], ['RELIGAÇÃO', 'RELIGAÇÕES'], ['LNA', 'LIGAÇÕES DE ÁGUA'], ['SANÇÃO', 'SANÇÕES'], ['OUTROS', 'OUTROS ÁGUA']];
+// campos do fechamento: [chave, rótulo, casas decimais]
+const FECH_CAMPOS = {
+    'Diretas (linha do BI)': [['dA', 'Fat. bruto direta água', 2], ['dE', 'Fat. bruto direta esgoto', 2], ['dTot', 'Fat. diretas total', 2],
+        ['ecoA', 'Qtd eco fat água', 0], ['ecoE', 'Qtd eco fat esgoto', 0], ['volA', 'Vol. faturado água direto (m³)', 0], ['volE', 'Vol. faturado esgoto direto (m³)', 0],
+        ['bruto', 'Faturamento total bruto', 2], ['canc', 'R$ Cancelamento total', 2], ['liq', 'R$ Faturamento total líquido', 2]],
+    'Indiretas (R$)': FECH_CLASSES.map(([c, r]) => ['ri_' + c, r, 2]).concat([['iE', 'LIGAÇÕES DE ESGOTO', 2]]),
+    'Indiretas (eventos faturados)': FECH_CLASSES.map(([c, r]) => ['ev_' + c, r, 0]).concat([['ev_LNE', 'LIGAÇÕES DE ESGOTO', 0]]),
+};
+const fechDados = () => lerJson('fechamento-dados');
+const fechChave = (mes) => `${mes}|${ESTADO.sup}`;
+function fechSalvar() {
+    try { localStorage.setItem(LS_PREFIXO + FECH_LS, JSON.stringify(fechMapa)); } catch (e) { /* sem armazenamento */ }
+    if (typeof syncFechamento !== 'undefined') syncFechamento.agendar();
+}
+// número do print: "459.916,60" / "1.345.390" / "-5.650.900,52"; o OCR troca às vezes . e , — duas casas no fim = centavos
+function fechNum(t) {
+    let s = String(t || '').trim().replace(/\s/g, '').replace(/^\((.*)\)$/, '-$1');
+    const neg = /^[-–]/.test(s); s = s.replace(/^[-–]/, '');
+    if (!/^\d[\d.,]*$/.test(s)) return null;
+    let v;
+    if (/[.,]\d{1,2}$/.test(s)) { const i = Math.max(s.lastIndexOf('.'), s.lastIndexOf(',')); v = parseFloat(s.slice(0, i).replace(/[.,]/g, '') + '.' + s.slice(i + 1)); }
+    else v = parseFloat(s.replace(/[.,]/g, ''));
+    return isNaN(v) ? null : (neg ? -v : v);
+}
+// lê o texto do OCR: {valores, ref}
+function fechInterpretar(texto) {
+    const v = {}, linhas = String(texto || '').split(/\n+/).map((l) => l.trim()).filter(Boolean);
+    const norm = (t) => t.normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase();
+    const contaRef = {};                          // mês: a data que se repete nas linhas das tabelas (não a lista do filtro do BI)
+    let diretasDoTotal = false;
+    linhas.forEach((l, i) => {
+        const datas = l.match(/\b\d{2}\/\d{2}\/\d{4}\b/g) || [];
+        const semData = l.replace(/\b\d{2}\/\d{2}\/\d{4}\b/g, ' ');
+        const nums = (semData.match(/[-–]?\d[\d.,]*\d|[-–]?\d/g) || []).map((x) => ({ txt: x, v: fechNum(x), dec: /[.,]\d{1,2}$/.test(x) })).filter((x) => x.v != null);
+        const rot = norm(semData.replace(/[-–]?\d[\d.,]*/g, ' ')).replace(/[^A-Z ]/g, ' ').replace(/\s+/g, ' ').trim();
+        const DIRETAS = ['dA', 'dE', 'dTot', 'ecoA', 'ecoE', 'volA', 'volE', 'bruto', 'canc', 'liq'];
+        // linha Total das diretas: costuma vir com os separadores certos (a linha com a data às vezes perde os pontos e vírgulas)
+        if (/^TOTAL/.test(rot)) {
+            if (nums.length >= 8) { DIRETAS.forEach((k, j) => { if (nums[j]) v[k] = nums[j].v; }); diretasDoTotal = true; }
+            return;
+        }
+        if (datas.length) contaRef[datas[0].slice(3)] = (contaRef[datas[0].slice(3)] || 0) + 1;
+        // linha das diretas: a data e muitos números (se o OCR quebrar a linha, junta com a seguinte)
+        if (datas.length && nums.length >= 6 && v.dA == null && !diretasDoTotal) {
+            let todos = nums.map((x) => x.v);
+            if (todos.length < 10 && linhas[i + 1]) todos = todos.concat((linhas[i + 1].match(/[-–]?\d[\d.,]*\d/g) || []).map(fechNum).filter((x) => x != null));
+            DIRETAS.forEach((k, j) => { if (todos[j] != null) v[k] = todos[j]; });
+            return;
+        }
+        if (!nums.length) return;
+        let cl = null;
+        if (/RELIGA/.test(rot)) cl = 'RELIGAÇÃO';
+        else if (/CORTE/.test(rot)) cl = 'CORTE';
+        else if (/LIGA/.test(rot) && /ESGOTO/.test(rot)) cl = 'LNE';
+        else if (/LIGA/.test(rot)) cl = 'LNA';
+        else if (/SANC|FISCALIZ/.test(rot)) cl = 'SANÇÃO';
+        else if (/OUTROS/.test(rot)) cl = 'OUTROS';
+        if (!cl) return;
+        const n = nums[0];
+        if (n.dec) { const k = cl === 'LNE' ? 'iE' : 'ri_' + cl; if (v[k] == null) v[k] = n.v; }        // R$ (com centavos)
+        else { const k = 'ev_' + cl; if (v[k] == null) v[k] = n.v; }                                  // quantidade (Faturadas)
+    });
+    const ref = Object.keys(contaRef).sort((a, b) => contaRef[b] - contaRef[a])[0] || '';
+    return { valores: v, ref };
+}
+let fechImagemUrl = null, fechTesseract = null;
+async function fechOCR(blob) {
+    const msg = document.getElementById('fechMsg');
+    if (!window.Tesseract) {
+        msg.textContent = 'Carregando o leitor de imagem (primeira vez pode levar alguns segundos)…';
+        await new Promise((ok, erro) => { const sc = document.createElement('script'); sc.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js'; sc.onload = ok; sc.onerror = () => erro(new Error('não foi possível carregar o leitor de imagem (internet)')); document.head.appendChild(sc); });
+    }
+    msg.textContent = 'Lendo os números da imagem…';
+    // tudo do jsdelivr (o mesmo CDN do gráfico): leitor, núcleo e o dicionário de português
+    if (!fechTesseract) fechTesseract = await Tesseract.createWorker('por', 1, {
+        workerPath: 'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/worker.min.js',
+        corePath: 'https://cdn.jsdelivr.net/npm/tesseract.js-core@5.1.1',
+        langPath: 'https://cdn.jsdelivr.net/npm/@tesseract.js-data/por@1.0.0/4.0.0_best_int' });
+    const r = await fechTesseract.recognize(blob);
+    return r.data.text;
+}
+async function fechReceberImagem(blob) {
+    const msg = document.getElementById('fechMsg');
+    if (fechImagemUrl) URL.revokeObjectURL(fechImagemUrl);
+    fechImagemUrl = URL.createObjectURL(blob);
+    try {
+        const texto = await fechOCR(blob);
+        const { valores, ref } = fechInterpretar(texto);
+        const n = Object.keys(valores).length;
+        msg.textContent = n ? `${n} número(s) lidos da imagem. Confira e corrija abaixo antes de salvar.` : 'Não encontrei os números na imagem: preencha abaixo ou tente um print mais nítido.';
+        fechConferir(valores, ref, texto);
+    } catch (e) {
+        msg.textContent = 'Não foi possível ler a imagem (' + (e.message || e) + '). Preencha os números abaixo.';
+        fechConferir({}, '', '');
+    }
+}
+// formulário de conferência: todos os campos editáveis, com as somas checadas
+function fechConferir(valores, ref, texto) {
+    const d = fechDados(), box = document.getElementById('fechConferir'); if (!d || !box) return;
+    const selMes = document.getElementById('fechMes');
+    if (ref && d.meses.includes(ref)) selMes.value = ref;
+    const fmt = (x, dc) => (x == null ? '' : x.toLocaleString('pt-BR', { minimumFractionDigits: dc, maximumFractionDigits: dc }));
+    box.innerHTML = `<div class="fech-conf"><div class="fech-conf-campos"><h3>Conferir os números — ${garEsc(d.rotulos[selMes.value] || selMes.value)} · ${garEsc(ESTADO.sup === 'TODAS' ? 'Todas' : ESTADO.sup)}</h3>`
+        + Object.entries(FECH_CAMPOS).map(([grupo, campos]) => `<fieldset><legend>${garEsc(grupo)}</legend>`
+            + campos.map(([k, rot, dc]) => `<label><span>${garEsc(rot)}</span><input class="fech-in" data-k="${k}" data-dc="${dc}" inputmode="decimal" value="${fmt(valores[k], dc)}"></label>`).join('') + '</fieldset>').join('')
+        + '<div id="fechChecks" class="fech-checks"></div>'
+        + '<div class="fech-acoes"><button type="button" class="btn-just fech-salvar" id="fechSalvarBtn">💾 Salvar fechamento</button><button type="button" class="btn-just" id="fechCancelar">Cancelar</button></div></div>'
+        + (fechImagemUrl ? `<div class="fech-conf-img"><img src="${fechImagemUrl}" alt="Print colado"><details><summary>Texto lido da imagem</summary><pre>${garEsc(texto || '')}</pre></details></div>` : '') + '</div>';
+    box.hidden = false;
+    fechChecar();
+}
+function fechLerForm() {
+    const v = {};
+    document.querySelectorAll('#fechConferir .fech-in').forEach((i) => { const x = fechNum(i.value); if (x != null) v[i.dataset.k] = x; });
+    return v;
+}
+function fechChecar() {
+    const el = document.getElementById('fechChecks'); if (!el) return;
+    const v = fechLerForm(), n = (x) => (x || 0), ok = (a, b, tol) => Math.abs(a - b) <= (tol || 1);
+    const iA = FECH_CLASSES.reduce((t, [c]) => t + n(v['ri_' + c]), 0);
+    const fmt = (x) => x.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const linhas = [];
+    if (v.dTot != null) linhas.push([ok(n(v.dA) + n(v.dE), v.dTot), `Diretas: água + esgoto = ${fmt(n(v.dA) + n(v.dE))} · total do BI ${fmt(v.dTot)}`]);
+    if (v.liq != null && v.bruto != null) linhas.push([ok(v.bruto + n(v.canc), v.liq), `Líquido: bruto + cancelamento = ${fmt(v.bruto + n(v.canc))} · líquido do BI ${fmt(v.liq)}`]);
+    if (v.bruto != null) { const s = n(v.dA) + n(v.dE) + iA + n(v.iE); linhas.push([Math.abs(s - v.bruto) <= Math.max(1, v.bruto * 0.001), `Bruto: diretas + indiretas = ${fmt(s)} · bruto do BI ${fmt(v.bruto)} (diferença ${fmt(v.bruto - s)})`]); }
+    el.innerHTML = linhas.map(([b, t]) => `<div class="${b ? 'fech-ok' : 'fech-erro'}">${b ? '✓' : '⚠'} ${garEsc(t)}</div>`).join('')
+        || '<div class="fech-erro">Preencha os números das diretas para checar as somas.</div>';
+}
+document.addEventListener('input', (e) => { if (e.target.classList && e.target.classList.contains('fech-in')) fechChecar(); });
+document.addEventListener('paste', (e) => {
+    if (!e.target.closest || !e.target.closest('#fechColar')) return;
+    const item = Array.from((e.clipboardData || {}).items || []).find((i) => i.type && i.type.startsWith('image/'));
+    if (!item) { document.getElementById('fechMsg').textContent = 'A área de transferência não tem imagem: no Power BI use "Copiar visual" ou tire um print (Win + Shift + S).'; return; }
+    e.preventDefault(); fechReceberImagem(item.getAsFile());
+});
+document.addEventListener('change', (e) => {
+    if (e.target.id === 'fechArquivo' && e.target.files[0]) { fechReceberImagem(e.target.files[0]); e.target.value = ''; }
+    if (e.target.id === 'fechMes' || e.target.id === 'fechOrcado') {
+        if (e.target.id === 'fechOrcado') { try { localStorage.setItem(LS_PREFIXO + 'faturamento_fech_orcado', e.target.value); } catch (er) {} }
+        fechDesenhar();
+    }
+});
+document.addEventListener('click', (e) => {
+    const id = e.target.id;
+    if (id === 'fechSalvarBtn') {
+        const mes = document.getElementById('fechMes').value, v = fechLerForm();
+        if (!Object.keys(v).length) { document.getElementById('fechMsg').textContent = 'Nada para salvar.'; return; }
+        fechMapa[fechChave(mes)] = { v, atualizado: new Date().toISOString() };
+        fechSalvar();
+        document.getElementById('fechConferir').hidden = true;
+        document.getElementById('fechMsg').textContent = `Fechamento de ${fechDados().rotulos[mes] || mes} salvo na pasta.`;
+        fechDesenhar();
+    } else if (id === 'fechCancelar') document.getElementById('fechConferir').hidden = true;
+    else if (id === 'fechEditar') { const s = fechMapa[fechChave(document.getElementById('fechMes').value)]; fechImagemUrl = null; fechConferir(s ? s.v : {}, '', ''); }
+    else if (id === 'fechLimpar') {
+        const mes = document.getElementById('fechMes').value, k = fechChave(mes);
+        if (!fechMapa[k]) return;
+        if (!confirm(`Apagar o fechamento de ${fechDados().rotulos[mes] || mes} (${ESTADO.sup})?`)) return;
+        delete fechMapa[k]; fechSalvar(); fechDesenhar();
+    } else if (e.target.closest && e.target.closest('#fechColar') && e.target.tagName !== 'INPUT') {
+        document.getElementById('fechMsg').textContent = 'Agora cole o print (Ctrl+V).';
+    }
+});
+function fechDesenhar() {
+    const d = fechDados(), alvo = document.getElementById('fechTabelas'); if (!d || !alvo) return;
+    const selMes = document.getElementById('fechMes'), selOrc = document.getElementById('fechOrcado');
+    if (!selMes.options.length) {
+        selMes.innerHTML = d.meses.slice().reverse().map((m) => `<option value="${garEsc(m)}">${garEsc(d.rotulos[m] || m)}</option>`).join('');
+        const salvos = Object.keys(fechMapa).filter((k) => k.endsWith('|' + ESTADO.sup)).map((k) => k.split('|')[0]).filter((m) => d.meses.includes(m));
+        const i = d.meses.indexOf(d.mesAtual);
+        selMes.value = salvos.length ? salvos.sort((a, b) => planoRefChave(a) < planoRefChave(b) ? 1 : -1)[0] : (i > 0 ? d.meses[i - 1] : d.mesAtual);
+        let salvoOrc = ''; try { salvoOrc = localStorage.getItem(LS_PREFIXO + 'faturamento_fech_orcado') || ''; } catch (e) {}
+        selOrc.innerHTML = d.fontes.map((f) => `<option value="${garEsc(f)}">${garEsc(f)}</option>`).join('') || '<option value="">Sem orçado</option>';
+        selOrc.value = d.fontes.includes(salvoOrc) ? salvoOrc : (d.fontes.includes(d.padrao) ? d.padrao : (d.fontes[0] || ''));
+    }
+    const mes = selMes.value, fonte = selOrc.value, sup = ESTADO.sup, salvo = fechMapa[fechChave(mes)];
+    const rotMes = d.rotulos[mes] || mes, nomeSup = sup === 'TODAS' ? 'Todas' : sup;
+    if (!salvo) { alvo.innerHTML = `<div class="card"><p class="gar-vazio">Nenhum fechamento salvo para ${garEsc(rotMes)} — ${garEsc(nomeSup)}. Cole o print do BI acima.</p></div>`; return; }
+    const r = salvo.v, o = ((d.orc[fonte] || {})[mes] || {})[sup] || {}, ev = ((d.ev[mes] || {})[sup]) || {};
+    const n = (x) => (x == null ? null : x), soma = (ks, obj) => (ks.some((k) => obj[k] != null) ? ks.reduce((t, k) => t + (obj[k] || 0), 0) : null);
+    const ris = FECH_CLASSES.map(([c]) => 'ri_' + c);
+    const calc = (x, ehReal) => {
+        const c = Object.assign({}, x);
+        c.dTot = ehReal && x.dTot != null ? x.dTot : soma(['dA', 'dE'], x);
+        c.iA = soma(ris, x); c.iTot = soma(['iA', 'iE'], c);
+        c.brutoDre = soma(['dTot', 'iTot'], c);
+        c.liqDre = ehReal && x.liq != null ? x.liq : (c.brutoDre != null ? c.brutoDre + (x.canc || 0) : null);
+        c.vmA = x.volA && x.ecoA ? x.volA / x.ecoA : null; c.vmE = x.volE && x.ecoE ? x.volE / x.ecoE : null;
+        c.tarA = x.dA && x.volA ? x.dA / x.volA : null; c.tarE = x.dE && x.volE ? x.dE / x.volE : null;
+        return c;
+    };
+    const R = calc(r, true), O = calc(o, false);
+    const fmt = (x, dc) => (x == null ? '–' : x.toLocaleString('pt-BR', { minimumFractionDigits: dc, maximumFractionDigits: dc }));
+    const pct = (x) => (x == null ? '–' : x.toLocaleString('pt-BR', { style: 'percent', minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+    // [chave, rótulo, classe da linha, casas]
+    const LIN = [['brutoDre', 'FATURAMENTO BRUTO', 'f-forte', 0], ['dTot', 'DIRETAS TOTAIS', 'f-forte', 0], ['dA', 'DIRETAS ÁGUA', 'f-sub', 0], ['dE', 'DIRETAS ESGOTO', 'f-sub', 0],
+        ['iTot', 'INDIRETAS TOTAIS', 'f-forte', 0], ['iA', 'INDIRETA ÁGUA', 'f-forte f-it', 0]].concat(FECH_CLASSES.map(([c, rot]) => ['ri_' + c, rot, 'f-sub', 0]),
+        [['iE', 'INDIRETA ESGOTO', 'f-forte f-it', 0], ['iE', 'LIGAÇÕES DE ESGOTO', 'f-sub', 0], ['ecoA', 'FAT ECONOMIAS ÁGUA', '', 0], ['ecoE', 'FAT ECONOMIAS ESGOTO', '', 0],
+        ['volA', 'VOL. FAT. ÁGUA', '', 0], ['volE', 'VOL. FAT. ESGOTO', '', 0], [null], ['vmA', 'VOLUME MÉDIO DE ÁGUA', '', 2], ['vmE', 'VOLUME MÉDIO DE ESGOTO', '', 2],
+        ['tarA', 'TARIFA MÉDIA DE ÁGUA', '', 2], ['tarE', 'TARIFA MÉDIA DE ESGOTO', '', 2], ['canc', 'CANCELAMENTO', 'f-forte', 0], ['liqDre', 'FATURAMENTO LÍQUIDO C/ REAJUSTE', 'f-forte', 0]]);
+    const linhaDre = ([k, rot, cls, dc]) => {
+        if (!k) return '<tr class="f-vazia"><td colspan="5"></td></tr>';
+        const a = n(O[k]), b = n(R[k]), dif = a != null && b != null ? b - a : null, p = dif != null && a ? dif / Math.abs(a) : null;
+        const ruim = dif != null && dif < -0.0001;                   // abaixo do orçado (no cancelamento: cancelou mais que o orçado)
+        return `<tr class="${cls}"><td>${garEsc(rot)}</td><td class="num">${fmt(a, dc)}</td><td class="num">${fmt(b, dc)}</td>`
+            + `<td class="num${ruim ? ' f-ruim' : ''}">${fmt(dif, dc)}</td><td class="num${ruim ? ' f-ruim' : ''}">${pct(p)}</td></tr>`;
+    };
+    const quando = salvo.atualizado ? new Date(salvo.atualizado).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }) : '';
+    const dre = `<div class="card fech-card"><h2>DRE — fechamento ${garEsc(rotMes)} — ${garEsc(nomeSup)}</h2>`
+        + `<p class="nota-secao">Números do BI salvos em ${garEsc(quando)} · orçado: <b>${garEsc(fonte || '—')}</b>. Faturamento bruto = diretas + indiretas; líquido = o do BI.</p>`
+        + `<div class="tabela-wrap"><table class="tabela-fech"><thead><tr><th>DRE</th><th class="num">Orçado</th><th class="num">${garEsc(rotMes)}</th><th class="num">Dif</th><th class="num">%</th></tr></thead><tbody>`
+        + LIN.map(linhaDre).join('') + '</tbody></table></div></div>';
+    // indiretas: R$ e eventos (com ticket médio realizado)
+    const linhaInd = (rot, a, b, cls, dc) => { const dif = a != null && b != null ? b - a : null, p = dif != null && a ? dif / a : null;
+        return `<tr class="${cls || ''}"><td>${garEsc(rot)}</td><td class="num">${fmt(a, dc)}</td><td class="num">${fmt(b, dc)}</td><td class="num${dif < -0.0001 ? ' f-ruim' : ''}">${fmt(dif, dc)}</td><td class="num${dif < -0.0001 ? ' f-ruim' : ''}">${pct(p)}</td></tr>`; };
+    const cabInd = (t1) => `<thead><tr><th>${t1}</th><th class="num">Orçado</th><th class="num">${garEsc(rotMes)}</th><th class="num">Dif</th><th class="num">%</th></tr></thead>`;
+    const indR = `<div class="card fech-card"><h2>Indiretas — valor (R$) — ${garEsc(rotMes)} — ${garEsc(nomeSup)}</h2><div class="tabela-wrap"><table class="tabela-fech">${cabInd('Classe')}<tbody>`
+        + FECH_CLASSES.map(([c, rot]) => linhaInd(rot, n(O['ri_' + c]), n(R['ri_' + c]), 'f-sub', 0)).join('')
+        + linhaInd('INDIRETA ÁGUA', O.iA, R.iA, 'f-forte f-it', 0) + linhaInd('LIGAÇÕES DE ESGOTO', n(O.iE), n(R.iE), 'f-sub', 0)
+        + linhaInd('INDIRETAS TOTAIS', O.iTot, R.iTot, 'f-forte', 0) + '</tbody></table></div></div>';
+    const evR = (c) => n(r['ev_' + c]), evO = (c) => n(ev[c === 'LNE' ? 'iE' : 'ri_' + c]);
+    const ticket = (c) => { const val = c === 'LNE' ? r.iE : r['ri_' + c], q = evR(c); return val != null && q ? val / q : null; };
+    const classesEv = FECH_CLASSES.concat([['LNE', 'LIGAÇÕES DE ESGOTO']]);
+    const indE = `<div class="card fech-card"><h2>Indiretas — eventos faturados — ${garEsc(rotMes)} — ${garEsc(nomeSup)}</h2>`
+        + `<p class="nota-secao">Orçado em eventos: planilha de eventos do orçado SUP (quando houver). Ticket médio = valor ÷ eventos do BI.</p>`
+        + `<div class="tabela-wrap"><table class="tabela-fech"><thead><tr><th>Classe</th><th class="num">Orçado</th><th class="num">${garEsc(rotMes)}</th><th class="num">Dif</th><th class="num">%</th><th class="num">Ticket médio (R$)</th></tr></thead><tbody>`
+        + classesEv.map(([c, rot]) => linhaInd(rot, evO(c), evR(c), 'f-sub', 0).replace('</tr>', `<td class="num">${fmt(ticket(c), 2)}</td></tr>`)).join('')
+        + (() => { const tq = classesEv.reduce((t, [c]) => t + (evR(c) || 0), 0), to = classesEv.some(([c]) => evO(c) != null) ? classesEv.reduce((t, [c]) => t + (evO(c) || 0), 0) : null;
+            return linhaInd('TOTAL (soma das classes)', to, tq || null, 'f-forte', 0).replace('</tr>', `<td class="num">${fmt(tq ? (R.iTot || 0) / tq : null, 2)}</td></tr>`); })()
+        + '</tbody></table></div></div>';
+    alvo.innerHTML = dre + indR + indE;
+}
+var syncFechamento = criaSync('fechamento', 'Fechamento', () => fechMapa,
+    (m) => { fechMapa = m; try { localStorage.setItem(LS_PREFIXO + FECH_LS, JSON.stringify(fechMapa)); } catch (e) {} },
+    () => fechDesenhar(),
+    () => !!(document.activeElement && document.activeElement.classList && document.activeElement.classList.contains('fech-in')));

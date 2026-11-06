@@ -140,6 +140,7 @@ def gera_aba_garantia_html(ctx):
     meses = ", ".join(nome_mes(r) for r in fechados) or "nenhum mês fechado na pasta"
     e = lambda v: html.escape(str(v))
     fonte_tarifa = e(tarifa.get("fonte", "padrão"))
+    tarifa_json = json.dumps(tarifa, ensure_ascii=False).replace("</", "<\\/")   # fora da f-string: o Python 3.11 não aceita \ dentro dela
     return f"""
 <div class="card gar-cabecalho">
   <div class="gar-topo">
@@ -210,10 +211,10 @@ def gera_aba_garantia_html(ctx):
     <button type="button" class="btn-just gar-filtro" id="garSoLiberados" aria-pressed="false" title="Considerar só os grupos com situação Liberado (manual ou automática), sem mexer no filtro de grupos das outras abas">Somente grupos liberados</button></div>
     <p class="nota-secao"><b>Queda de consumo:</b> garantia = faturado ajustado (atual) − faturado anterior (foto).
     <b>Aumento de consumo:</b> garantia = faturado ajustado (atual) − valor pela média (estrutura tarifária), o que deixou de ser
-    perdido com o desconto pela média. Liberadas = Situação Conta diferente de EM ANALISE.</p>
+    perdido com o desconto pela média. Em análise = Situação Conta EM ANALISE <b>ou</b> Situação Lançamento com “RETIDA” no nome em grupo ainda não liberado (Situação do grupo na aba Diretas, que pode ser ajustada à mão); liberadas = as demais.</p>
     <div id="garResumo"></div>
   </div>
 </div>
 <script type="application/octet-stream" id="garantia-dados" data-gz="1">{b64}</script>
-<script type="application/json" id="tarifa-dados">{json.dumps(tarifa, ensure_ascii=False).replace("</", "<\\/")}</script>
+<script type="application/json" id="tarifa-dados">{tarifa_json}</script>
 """

@@ -317,6 +317,12 @@ def test_armazenamento_do_navegador_separado_por_site():
     assert 'const PICKER_LS = ESCOPO + ":faturamento_picker_seguro";' in site and '{ id: ESCOPO, mode: "read" }' in site
     assert rel.count("localStorage.getItem(") == rel.count("localStorage.getItem(LS_PREFIXO + ")
     assert rel.count("localStorage.setItem(") == rel.count("localStorage.setItem(LS_PREFIXO + ")
+    assert rel.count("localStorage.removeItem(") == rel.count("localStorage.removeItem(LS_PREFIXO + ")
+    # no site, toda chave do navegador é uma constante com o prefixo do site (chaves novas do original entram sem ele)
+    soltas = re.findall(r'localStorage\.(?:get|set|remove)Item\(\s*["\']', site)
+    assert not soltas, soltas
+    for nome in set(re.findall(r'localStorage\.(?:get|set|remove)Item\(\s*([A-Z_]+)', site)):
+        assert re.search(r'const ' + nome + r' = ESCOPO \+ ":', site), nome
 
 
 def test_preferencias_de_visualizacao_por_pessoa(analise):
