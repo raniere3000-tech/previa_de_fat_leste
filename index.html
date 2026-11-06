@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Análise de Faturamento — Água e Esgoto</title>
 <!-- ícone da aba: gota em azul sobre quadrado marinho (cores do painel) -->
-<link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PHJlY3Qgd2lkdGg9IjY0IiBoZWlnaHQ9IjY0IiByeD0iMTQiIGZpbGw9IiMxMDI4NDAiLz48cGF0aCBkPSJNMzIgNEMzMiA0IDExIDI3LjUgMTEgNDBhMjEgMjEgMCAwIDAgNDIgMEM1MyAyNy41IDMyIDQgMzIgNHoiIGZpbGw9IiMxNmE1YjgiLz48cGF0aCB0cmFuc2Zvcm09InRyYW5zbGF0ZSgtMi41IC0xKSIgZD0iTTIxLjUgNTRWMzBoOC42YzUuNCAwIDguNCAyLjggOC40IDcuNHMtMyA3LjQtOC40IDcuNEgyNy4zVjU0ek0yNy4zIDQwLjJoMi40YzIgMCAzLjEtMSAzLjEtMi44cy0xLjEtMi44LTMuMS0yLjhoLTIuNHoiIGZpbGw9IiNmZmYiLz48cGF0aCBkPSJNMzcgNTNWMjloNS44djE4LjZINDhWNTN6IiBmaWxsPSIjZmZmIi8+PC9zdmc+">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PHJlY3Qgd2lkdGg9IjY0IiBoZWlnaHQ9IjY0IiByeD0iMTQiIGZpbGw9IiNFMjY3MUIiLz48cGF0aCBkPSJNMzIgNEMzMiA0IDExIDI3LjUgMTEgNDBhMjEgMjEgMCAwIDAgNDIgMEM1MyAyNy41IDMyIDQgMzIgNHoiIGZpbGw9IiNmZmYiLz48cGF0aCB0cmFuc2Zvcm09InRyYW5zbGF0ZSgtMi41IC0xKSIgZD0iTTIxLjUgNTRWMzBoOC42YzUuNCAwIDguNCAyLjggOC40IDcuNHMtMyA3LjQtOC40IDcuNEgyNy4zVjU0ek0yNy4zIDQwLjJoMi40YzIgMCAzLjEtMSAzLjEtMi44cy0xLjEtMi44LTMuMS0yLjhoLTIuNHoiIGZpbGw9IiMxMDI4NDAiLz48cGF0aCBkPSJNMzcgNTNWMjloNS44djE4LjZINDhWNTN6IiBmaWxsPSIjMTAyODQwIi8+PC9zdmc+">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -451,7 +451,7 @@ body.sem-pasta #btnPasta, body.sem-pasta #btnLimparCache { display: none; }
 <header class="top">
   <div class="top-linha">
     <div>
-      <div class="eyebrow">Águas do Rio • Relatório Executivo <span class="versao-nuvem"><span class="versao" id="versao">v125</span><button type="button" class="nuvem nuvem-erro" id="nuvem" title="Sem pasta conectada: as alterações ficam só neste navegador" aria-label="Situação do salvamento na nuvem"></button></span></div>
+      <div class="eyebrow">Águas do Rio • Relatório Executivo <span class="versao-nuvem"><span class="versao" id="versao">v126</span><button type="button" class="nuvem nuvem-erro" id="nuvem" title="Sem pasta conectada: as alterações ficam só neste navegador" aria-label="Situação do salvamento na nuvem"></button></span></div>
       <h1 id="titulo">Análise de Faturamento — Água e Esgoto</h1>
     </div>
     <div class="filtros" id="filtros">
@@ -659,7 +659,7 @@ body.sem-pasta #btnPasta, body.sem-pasta #btnLimparCache { display: none; }
   // que é guardado aqui (pasta conectada, arquivos já lidos, edições) leva este prefixo para não misturar as pastas.
   const ESCOPO = "previa_de_fat_leste";
   window.ESCOPO_ARMAZENAMENTO = ESCOPO;            // o relatório (quadro) usa o mesmo prefixo
-  const VERSAO_SITE = "v125-20261106"; // muda a cada alteração: o selo do cabeçalho é derivado daqui
+  const VERSAO_SITE = "v126-20261106"; // muda a cada alteração: o selo do cabeçalho é derivado daqui
   try { document.getElementById("versao").textContent = VERSAO_SITE.split("-")[0]; } catch (e) {}
   const EXTENSOES = [".csv", ".xlsx", ".xls"];
   const SAIDAS = {
