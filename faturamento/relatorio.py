@@ -96,7 +96,7 @@ def monta_html(ctx, *, alerta_minimo_html, aviso_ajustes_html, filtro_html, card
 <head>
 <meta charset="UTF-8">
 <title>Relatório Comparativo Água x Esgoto</title>
-<link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PHJlY3Qgd2lkdGg9IjY0IiBoZWlnaHQ9IjY0IiByeD0iMTQiIGZpbGw9IiNFMjY3MUIiLz48cGF0aCBkPSJNMzIgNEMzMiA0IDExIDI3LjUgMTEgNDBhMjEgMjEgMCAwIDAgNDIgMEM1MyAyNy41IDMyIDQgMzIgNHoiIGZpbGw9IiNmZmYiLz48cGF0aCB0cmFuc2Zvcm09InRyYW5zbGF0ZSgtMi41IC0xKSIgZD0iTTIxLjUgNTRWMzBoOC42YzUuNCAwIDguNCAyLjggOC40IDcuNHMtMyA3LjQtOC40IDcuNEgyNy4zVjU0ek0yNy4zIDQwLjJoMi40YzIgMCAzLjEtMSAzLjEtMi44cy0xLjEtMi44LTMuMS0yLjhoLTIuNHoiIGZpbGw9IiMxMDI4NDAiLz48cGF0aCBkPSJNMzcgNTNWMjloNS44djE4LjZINDhWNTN6IiBmaWxsPSIjMTAyODQwIi8+PC9zdmc+">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PHJlY3Qgd2lkdGg9IjY0IiBoZWlnaHQ9IjY0IiByeD0iMTQiIGZpbGw9IiMxNmE1YjgiLz48cGF0aCBkPSJNMjAgMTJoMTB2MjloMTV2MTBIMjB6IiBmaWxsPSIjZmZmIi8+PC9zdmc+">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Condensed:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
