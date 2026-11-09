@@ -1080,6 +1080,28 @@ async function lerAnalitico() {
 
 const numBR = (v) => (v === '' || v == null ? null : parseFloat(String(v).replace(',', '.')));
 
+// SUP de cada grupo (a mesma do painel: Localidade do cronograma; sem ela, a SUP mais frequente do grupo)
+let grupoSupCache = null;
+function mapaGrupoSup() {
+    if (grupoSupCache) return grupoSupCache;
+    let m = {};
+    try { m = JSON.parse(document.getElementById('info-filtros').textContent).grupoSup || {}; } catch (e) { m = {}; }
+    grupoSupCache = {};
+    Object.keys(m).forEach((g) => { if (m[g] && m[g] !== 'SEM SUP') grupoSupCache[normGrupo(g)] = m[g]; });
+    return grupoSupCache;
+}
+// a matrícula entra na SUP escolhida pelo grupo dela (como as tabelas da tela); grupo sem SUP conhecida: pela cidade da matrícula
+function linhaDaSup(v, sup, colsGrupo) {
+    if (sup === 'TODAS') return true;
+    const m = mapaGrupoSup();
+    let conhecida = false;
+    for (const c of colsGrupo) {
+        const g = v(c), s = g ? m[normGrupo(g)] : null;
+        if (s) { if (s === sup) return true; conhecida = true; }
+    }
+    return !conhecida && v('Superintendência') === sup;
+}
+
 // colunas e linhas de cada tabela; "top-…": ranking completo calculado aqui (todas as ligações com queda/aumento)
 function definicaoAnalitico(tipo, ra, rn) {
     const base = ['N. Ligação', 'Nome Cliente', 'Categoria', 'Superintendência', 'Grupo'];
@@ -1228,7 +1250,7 @@ async function baixarBaseAnalitica(tipo) {
             const grupo = v(`Grupo ${ref}`), vA = n(`Valor água ${ref}`), vE = n(`Valor esgoto ${ref}`);
             const cA = n(`Consumo água ${ref}`), med = n(`Consumo medido água ${ref}`), eA = n(`Economias faturadas água ${ref}`), eE = n(`Economias faturadas esgoto ${ref}`);
             if (!grupo && vA == null && vE == null && cA == null && med == null) return;          // a matrícula não está neste mês
-            if (sup !== 'TODAS' && v('Superintendência') !== sup) return;
+            if (!linhaDaSup(v, sup, [grupo ? `Grupo ${ref}` : 'Grupo'])) return;
             if (grupos && !(grupo && grupos.has(normGrupo(grupo)))) return;
             const fatEsg = !!(vE || eE);
             let cE = n(`Consumo esgoto ${ref}`);
@@ -1281,7 +1303,7 @@ async function baixaDetalhe(b) {
             const v = leitor(l);
             const sit = b.dataset.sit !== undefined ? v(`Situação Lançamento ${a.ra}`) === b.dataset.sit
                 : b.dataset.gsit !== undefined ? v(`Leitura da situação ${a.ra}`) === b.dataset.gsit : true;
-            return (sup === 'TODAS' || v('Superintendência') === sup) && sit && def.filtro(v)
+            return linhaDaSup(v, sup, (def.grupos || ['Grupo']).concat('Grupo')) && sit && def.filtro(v)
                 && (!grupos || (def.grupos || ['Grupo']).some((c) => v(c) !== '' && grupos.has(normGrupo(v(c)))));
         }).map((l) => {
             const v = leitor(l);
@@ -1295,7 +1317,11 @@ async function baixaDetalhe(b) {
         const sitNome = (b.dataset.sit || b.dataset.gsit || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
             .replace(/[^A-Za-z0-9]+/g, '_').replace(/^_|_$/g, '');
         const nome = `${def.nome}${soEsg ? '_so_esgoto' : ''}${sitNome ? '_' + sitNome : ''}_${a.mes}${sup !== 'TODAS' ? '_' + sup.replace(/[^A-Za-z0-9]/g, '') : ''}${grupos ? '_grupos_filtrados' : ''}.csv`;
-        if (!linhas.length && def.vazio) { alert(def.vazio); return; }
+        if (!linhas.length) {
+            alert(def.vazio || ('Nenhuma matrícula nesta tabela com os filtros da tela (Superintendência '
+                + (sup === 'TODAS' ? 'Todas' : sup) + (grupos ? ', ' + grupos.size + ' grupo(s) marcado(s)' : '') + ').'));
+            return;
+        }
         await baixarPlanilha(def.cols, linhas, nome);
     } catch (erro) {
         alert('Não foi possível baixar o analítico neste navegador (' + erro.message + ').');
