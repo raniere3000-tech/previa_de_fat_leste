@@ -1,4 +1,4 @@
-25f92888fc80e76fa03f95da349742afb3a008af
-# Último commit do painel original (analise-faturamento-agua-esgoto) já replicado aqui (v180).
+ee68a5ff23fc091421da4767b36ff88bed7e2eee
+# Último commit do painel original (analise-faturamento-agua-esgoto) já replicado aqui (v181).
 # Depois de replicar novas versões, troque a primeira linha pelo hash do último commit replicado.
 # O aviso roda a cada 2 horas e quando este arquivo muda.
