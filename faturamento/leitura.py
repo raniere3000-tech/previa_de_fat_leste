@@ -5,6 +5,7 @@ import glob
 import io
 import os
 import re
+import unicodedata
 import zipfile
 
 import numpy as np
@@ -534,6 +535,26 @@ def lista_arquivos_entrada(pasta):
         brutos += glob.glob(os.path.join(pasta, "**", f"*.{ext}"), recursive=True)
     brutos = [c for c in sorted(set(brutos)) if os.path.abspath(c) not in saidas and not os.path.basename(c).startswith("~$")]
     return sorted(brutos, key=lambda c: (c.count(os.sep), c))         # pasta principal primeiro, depois subpastas
+
+
+_SUFIXO_COPIA = re.compile(r"(\s*\(\d+\)|\s*-?\s*(copia|copy)(\s*\(?\d+\)?)?)+$")
+
+
+def nome_sem_copia(caminho):
+    """'Fatura de ciclo 10-2026 (1).xlsx', 'Fatura de ciclo 10-2026 - Cópia.csv' → 'fatura de ciclo 10-2026'
+    (sem pasta, extensão, maiúsculas/acentos e o sufixo que o Windows/navegador põe nas cópias)."""
+    base = os.path.splitext(os.path.basename(caminho))[0]
+    base = unicodedata.normalize("NFKD", base).encode("ascii", "ignore").decode().lower().strip()
+    return _SUFIXO_COPIA.sub("", base).strip()
+
+
+def arquivos_com_mesmo_nome(caminhos, pasta):
+    """Grupos (2 ou mais) de arquivos com o mesmo nome — iguais ou só com '(1)', '- Cópia' no fim, em qualquer subpasta
+    ou extensão. Não exclui nada: serve para o aviso da aba Dados (arquivo baixado duas vezes conta em dobro)."""
+    grupos = {}
+    for c in caminhos:
+        grupos.setdefault(nome_sem_copia(c), []).append(nome_relativo(c, pasta))
+    return [sorted(g) for _, g in sorted(grupos.items()) if len(g) > 1]
 
 
 def nome_relativo(caminho, pasta):

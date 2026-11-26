@@ -7,7 +7,7 @@ import pandas as pd
 
 from . import cache_arquivos
 from .config import COLUNAS_ECONOMIA_TODAS, COLUNAS_ECONOMIA_TOTAIS, REGRAS
-from .leitura import (chave_grupo, classifica_arquivos, compacta_textos, nome_relativo, processa_avulso, processa_consumo, processa_cronograma,
+from .leitura import (arquivos_com_mesmo_nome, chave_grupo, classifica_arquivos, compacta_textos, lista_arquivos_entrada, nome_relativo, processa_avulso, processa_consumo, processa_cronograma,
                       processa_fatura_completa, processa_orcado)
 
 
@@ -115,6 +115,14 @@ def monta_base(ctx):
     print("=" * 70)
     cache_arquivos.configura(ctx.pasta)            # arquivos já lidos em análises anteriores (guardados no navegador)
     ctx.classificacao = classifica_arquivos(ctx.pasta, progresso)
+    # mesmo nome, ex.: "Fatura de ciclo 10-2026" e "Fatura de ciclo 10-2026 (1)": só avisa (nada é excluído)
+    identicos = {ig["arquivo"] for ig in ctx.classificacao["ignorados"] if str(ig.get("motivo", "")).startswith("conteúdo idêntico")}
+    for nomes in arquivos_com_mesmo_nome(lista_arquivos_entrada(ctx.pasta), ctx.pasta):
+        lista = " e ".join(f'"{n}"' for n in nomes) if len(nomes) == 2 else ", ".join(f'"{n}"' for n in nomes[:-1]) + f' e "{nomes[-1]}"'
+        ctx.avisos_base.append(f"Arquivos com o mesmo nome encontrados na pasta: {lista}"
+                               + (" — o conteúdo é idêntico e foi contado uma vez só." if len(set(nomes) & identicos) == len(nomes) - 1
+                                  else " — se forem a mesma informação (arquivo baixado duas vezes), os valores entram em dobro: "
+                                       "confira e deixe só um na pasta."))
 
     print("=" * 70)
     print("ETAPA 2/6 — PROCESSAMENTO DOS ARQUIVOS")
