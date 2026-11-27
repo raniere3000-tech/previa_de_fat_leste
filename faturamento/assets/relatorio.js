@@ -38,7 +38,7 @@ function definirFiltros(parcial) {
     });
     aplicarSupNosGrupos();
     aplicarFontes();
-    cortRecalcular(); cort3Recalcular();
+    cortRecalcular(); cort3Recalcular(); cfatRecalcular();
     [['selSup', ESTADO.sup], ['selMes', ESTADO.mes], ['selRef', ESTADO.ref]].forEach(([id, v]) => {
         const el = document.getElementById(id); if (el && v) el.value = v;
     });
@@ -226,6 +226,7 @@ function filtrarPorGrupo() {
     refazTops();                                            // Top 100 refeito só com os grupos marcados
     sitlRecalcular();                                       // cards da Situação de lançamento
     cortRecalcular(); cort3Recalcular();                    // cortadas com consumo (mês e 3 meses)
+    cfatRecalcular();                                       // cortadas faturando
     if (typeof garRedesenhar === 'function') garRedesenhar();   // aba Garantia (Top 1000, análise e resumo)
     if (typeof planoDesenhar === 'function') planoDesenhar();   // aba Plano de ação
     if (typeof orcGruposDesenhar === 'function') orcGruposDesenhar();   // aba Diretas: orçados por grupo
@@ -4566,6 +4567,64 @@ function cortRecalcular() {
     p('cort-qtd', f(qtd, 0)); p('cort-med', f(med, 1)); p('cort-val', 'R$ ' + f(val, 2)); p('cort-reinc', f(reinc, 0));
 }
 document.addEventListener('DOMContentLoaded', cortRecalcular);
+
+// Análise > Cortadas faturando (Situação Ligação cortada e valor faturado > 0): cards, resumo por ciclo e lista refeitos
+// com os grupos marcados e a SUP (pela SUP do grupo, como as tabelas da tela; grupo sem SUP conhecida: pela cidade)
+function cfatRecalcular() {
+    const t = document.getElementById('tabela-cfat'), res = document.getElementById('tabela-cfat-resumo');
+    if (!t || !res) return;
+    const caixas = Array.from(document.querySelectorAll('.chk-grupo'));
+    const marcados = new Set(caixas.filter(c => c.checked).map(c => normGrupo(c.value)));
+    const mapa = mapaGrupoSup();
+    const daSup = (g, supLinha) => ESTADO.sup === 'TODAS' || (mapa[g] ? mapa[g] === ESTADO.sup : supLinha === ESTADO.sup);
+    const ok = (g, supLinha) => (!caixas.length || marcados.has(g)) && daSup(g, supLinha);
+    const por = {}, novo = (g, rot) => (por[g] = por[g] || { rot: rot, n: 0, eco: 0, val: 0, novas: 0, rec: 0, nAnt: 0, valAnt: 0 });
+    const tot = { n: 0, eco: 0, val: 0, novas: 0, rec: 0, nAnt: 0 };
+    t.querySelectorAll('tbody tr').forEach(tr => {
+        const g = normGrupo(tr.dataset.grupo), vis = ok(g, tr.dataset.sup);
+        tr.style.display = vis ? '' : 'none';
+        if (!vis) return;
+        const p = novo(g, tr.dataset.grupo), eco = parseFloat(tr.dataset.eco) || 0, val = parseFloat(tr.dataset.val) || 0, rec = tr.dataset.rec === '1';
+        p.n++; p.eco += eco; p.val += val; p[rec ? 'rec' : 'novas']++;
+        tot.n++; tot.eco += eco; tot.val += val; tot[rec ? 'rec' : 'novas']++;
+    });
+    let ant = {};
+    try { ant = JSON.parse(document.getElementById('cfat-anterior').textContent) || {}; } catch (e) { ant = {}; }
+    Object.keys(ant).forEach(gr => {
+        const g = normGrupo(gr);
+        if (!ok(g, '')) return;
+        const p = novo(g, gr); p.nAnt += ant[gr][0]; p.valAnt += ant[gr][2]; tot.nAnt += ant[gr][0];
+    });
+    const f = (v, d) => v.toLocaleString('pt-BR', { minimumFractionDigits: d || 0, maximumFractionDigits: d || 0 });
+    const cor = (v) => (v < 0 ? ' style="color:#C2560C"' : '');
+    let totValAnt = 0;
+    const linhas = Object.keys(por).sort((a, b) => (parseInt(a, 10) || 0) - (parseInt(b, 10) || 0) || a.localeCompare(b)).map(g => {
+        const p = por[g]; totValAnt += p.valAnt;
+        return `<tr><td>${garEsc(p.rot)}</td><td>${f(p.n)}</td><td>${f(p.nAnt)}</td><td${cor(p.n - p.nAnt)}>${f(p.n - p.nAnt)}</td>`
+            + `<td>${f(p.novas)}</td><td>${f(p.rec)}</td><td>${f(p.eco)}</td><td>R$ ${f(p.val, 2)}</td><td>R$ ${f(p.valAnt, 2)}</td>`
+            + `<td${cor(p.val - p.valAnt)}>R$ ${f(p.val - p.valAnt, 2)}</td></tr>`;
+    });
+    linhas.push(`<tr class="linha-total" style="font-weight:700"><td>Total</td><td>${f(tot.n)}</td><td>${f(tot.nAnt)}</td>`
+        + `<td${cor(tot.n - tot.nAnt)}>${f(tot.n - tot.nAnt)}</td><td>${f(tot.novas)}</td><td>${f(tot.rec)}</td><td>${f(tot.eco)}</td>`
+        + `<td>R$ ${f(tot.val, 2)}</td><td>R$ ${f(totValAnt, 2)}</td><td${cor(tot.val - totValAnt)}>R$ ${f(tot.val - totValAnt, 2)}</td></tr>`);
+    res.querySelector('tbody').innerHTML = linhas.join('');
+    const p = (id, txt) => { const el = document.getElementById(id); if (el) el.textContent = txt; };
+    p('cfat-qtd', f(tot.n)); p('cfat-eco', f(tot.eco)); p('cfat-val', 'R$ ' + f(tot.val, 2));
+    p('cfat-novas', f(tot.novas)); p('cfat-rec', f(tot.rec)); p('cfat-qtd-ant', f(tot.nAnt));
+}
+document.addEventListener('DOMContentLoaded', cfatRecalcular);
+document.addEventListener('click', async function (e) {
+    const b = e.target.closest && e.target.closest('.btn-cfat');
+    const t = document.getElementById('tabela-cfat');
+    if (!b || !t) return;
+    const cols = Array.from(t.querySelectorAll('thead th')).map(th => th.textContent.trim());
+    const num = (s) => { const x = parseFloat(s.replace('R$', '').replace(/\./g, '').replace(',', '.')); return isNaN(x) ? (s === '—' ? '' : s) : x; };
+    const linhas = Array.from(t.querySelectorAll('tbody tr')).filter(tr => tr.style.display !== 'none')
+        .map(tr => Array.from(tr.children).map((td, i) => { const s = td.textContent.trim(); return i >= 7 && i <= 13 ? num(s) : s; }));
+    if (!linhas.length) { alert('Nenhuma ligação cortada faturando com os filtros da tela.'); return; }
+    const sup = ESTADO.sup !== 'TODAS' ? '_' + ESTADO.sup.replace(/[^A-Za-z0-9]/g, '') : '';
+    await baixarPlanilha(cols, linhas, `Cortadas_faturando_${b.dataset.mes}${sup}.xlsx`);
+});
 
 // Análise > Cortadas com consumo nos 3 últimos meses: resumo por combinação refeito com grupos e SUP; o clique numa
 // combinação mostra só as ligações dela (clique de novo para ver todas)

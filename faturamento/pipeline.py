@@ -126,6 +126,9 @@ class Sessao:
         from .tabelas_html import barra_vista_analise, tabelas_so_esgoto
         quadro_ciclos_html, matriz_html, tabela_minimo_html = tabelas_so_esgoto(ctx, quadro_ciclos_html, matriz_html, tabela_minimo_html)
         quadro_ciclos_html = barra_vista_analise() + quadro_ciclos_html
+        passo(77, "Criando quadro: Cortadas faturando (situação cortada com valor faturado)")
+        from .cortadas_faturando import gera_cortadas_faturando_html
+        quadro_ciclos_html += gera_cortadas_faturando_html(ctx)
 
         passo(78, "Criando tabelas: Top 100 maior queda de consumo (água e esgoto)")
         from .dre import lista_sups, prepara, _nome_sup
